@@ -97,23 +97,13 @@ public struct RoPE2D {
 }
 
 // MARK: - RMS normalization
-
-public final class RMSNorm: Module {
-    public let weight: MLXArray
-    public let eps: Float
-
-    public init(dim: Int, eps: Float = 1e-6) {
-        self.weight = MLXArray.ones([dim])
-        self.eps = eps
-        super.init()
-    }
-
-    public func callAsFunction(_ x: MLXArray) -> MLXArray {
-        let variance = mean(x.square(), axis: -1, keepDims: true)
-        let normalized = x * rsqrt(variance + MLXArray(eps))
-        return normalized * weight
-    }
-}
+//
+// vmlx-flux uses MLXNN's `RMSNorm(dimensions:eps:)` directly — it ships
+// as `open class RMSNorm: Module, UnaryLayer` with a hardware-accelerated
+// `MLXFast.rmsNorm` body. A pure-Swift fallback used to live here; it was
+// removed to avoid a naming collision where my local class was shadowing
+// the fast path. If you need to swap in a custom norm for a future model,
+// subclass `MLXNN.RMSNorm` — don't re-declare a top-level `RMSNorm`.
 
 // MARK: - Scaled dot-product attention with RoPE
 

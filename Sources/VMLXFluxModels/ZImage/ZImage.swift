@@ -85,12 +85,16 @@ public final class ZImage: ImageGenerator, @unchecked Sendable {
             maxShift: 1.15
         )
 
-        // 2. Allocate the initial noise latent — Z-Image uses the
-        // spatial (B, 4, H/8, W/8) layout.
+        // 2. Allocate the initial noise latent. The Flux-family VAE
+        // uses 16-channel latents (NOT 4 like SD/SDXL), and the DiT
+        // transformer's `imgIn: Linear(patch²·16, dim)` hard-codes
+        // that channel count. Sourcing from `transformer.config.inChannels`
+        // keeps the two in sync and prevents a shape mismatch at
+        // patchify time.
         var latent = LatentSpace.initialNoise(
             width: request.width,
             height: request.height,
-            layout: .spatial(channels: 4),
+            layout: .spatial(channels: transformer.config.inChannels),
             batchSize: 1,
             seed: request.seed
         )
