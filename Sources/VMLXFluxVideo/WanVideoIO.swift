@@ -108,7 +108,7 @@ public enum WanVideoIO {
         writer.startSession(atSourceTime: .zero)
 
         for frameIdx in 0..<t {
-            // Extract (C, H, W) → convert to BGRA bytes.
+            // Extract (C, H, W) → pack into ARGB pixel buffer below.
             let frame = video[0 ..< 3, frameIdx ..< frameIdx + 1, 0 ..< h, 0 ..< w]
                 .reshaped([3, h, w])
             let clamped = clip(frame, min: MLXArray(Float(0)), max: MLXArray(Float(1)))

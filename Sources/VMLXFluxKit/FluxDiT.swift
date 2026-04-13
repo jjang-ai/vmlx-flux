@@ -429,6 +429,39 @@ public struct FluxDiTConfig: Sendable {
     )
 }
 
+/// ## Weight key mapping (for the real `.safetensors` loader)
+///
+/// Black Forest Labs ships FLUX checkpoints with the following naming
+/// convention. When the real weight loader lands, it must translate
+/// from these checkpoint keys to the Swift property names via
+/// `@ModuleInfo(key: "...")` decorators OR an explicit remap table fed
+/// to `Module.update(parameters:)`.
+///
+///     Checkpoint key                        → Swift property
+///     ─────────────────────────────────────────────────────────
+///     img_in.weight                         → imgIn
+///     time_in.in_layer.weight               → timeIn0
+///     time_in.out_layer.weight              → timeIn2
+///     vector_in.in_layer.weight             → vectorIn0
+///     vector_in.out_layer.weight            → vectorIn2
+///     guidance_in.in_layer.weight           → guidanceIn0 (Dev only)
+///     guidance_in.out_layer.weight          → guidanceIn2 (Dev only)
+///     txt_in.weight                         → txtIn
+///     double_blocks.{i}.img_mod.lin.weight  → doubleBlocks[i].imgMod.linear
+///     double_blocks.{i}.img_attn.qkv.weight → doubleBlocks[i].imgAttnQKV
+///     double_blocks.{i}.img_attn.proj.weight→ doubleBlocks[i].imgAttnProj
+///     double_blocks.{i}.img_attn.norm.query_norm.scale → .imgAttnNorm.qNorm.weight
+///     double_blocks.{i}.img_attn.norm.key_norm.scale   → .imgAttnNorm.kNorm.weight
+///     double_blocks.{i}.img_mlp.0.weight    → doubleBlocks[i].imgMlp0
+///     double_blocks.{i}.img_mlp.2.weight    → doubleBlocks[i].imgMlp2
+///     double_blocks.{i}.txt_*                → doubleBlocks[i].txt*  (same pattern)
+///     single_blocks.{i}.modulation.lin.weight → singleBlocks[i].mod.linear
+///     single_blocks.{i}.linear1.weight      → singleBlocks[i].linear1
+///     single_blocks.{i}.linear2.weight      → singleBlocks[i].linear2
+///     single_blocks.{i}.norm.query_norm.scale → .qkNorm.qNorm.weight
+///     single_blocks.{i}.norm.key_norm.scale   → .qkNorm.kNorm.weight
+///     final_layer.linear.weight             → finalLayer.linear
+///     final_layer.adaLN_modulation.1.weight → finalLayer.mod
 public final class FluxDiTModel: Module {
     public let config: FluxDiTConfig
     public let imgIn: Linear   // patch embed: (patch² * in_channels) → dim
