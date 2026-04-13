@@ -66,7 +66,7 @@ public final class CausalConv3d: Module {
         let w = x.dim(4)
         // (B, C, T, H, W) → (B*T, C, H, W)
         let reshaped = x.transposed(0, 2, 1, 3, 4).reshaped([b * t, c, h, w])
-        let convOut = nhwc(conv2d(nchwToNhwc(reshaped)))
+        let convOut = nhwcToNchw(conv2d(nchwToNhwc(reshaped)))
         // (B*T, outC, H, W) → (B, T, outC, H, W) → (B, outC, T, H, W)
         return convOut.reshaped([b, t, outChannels, h, w]).transposed(0, 2, 1, 3, 4)
     }

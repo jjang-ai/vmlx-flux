@@ -47,11 +47,11 @@ public final class ZImage: ImageGenerator, @unchecked Sendable {
         // on the first generate call.
         self.loadedWeights = try WeightLoader.load(from: modelPath)
 
-        // Z-Image uses a smaller Flux-style transformer (~2B vs Flux1's
-        // 12B). The exact config comes from the checkpoint's config.json
-        // — for now we use the schnell topology as a starting point and
-        // will swap when config parsing lands.
-        self.transformer = FluxDiTModel(config: .schnell)
+        // Z-Image Turbo — ~2B params, single-encoder. Uses the
+        // `zImageTurbo` preset which is Flux-style but narrower and
+        // shallower. Real hyperparams will come from parsing the
+        // checkpoint's `config.json` when the per-model loader lands.
+        self.transformer = FluxDiTModel(config: .zImageTurbo)
         // Flux-family VAE — shared with Flux1/Flux2/FIBO/Qwen.
         self.vae = VAEDecoder()
     }
@@ -95,10 +95,16 @@ public final class ZImage: ImageGenerator, @unchecked Sendable {
             seed: request.seed
         )
 
-        // 3. Sampling loop. Each step emits a progress event so the UI's
-        // step counter advances correctly. `velocityPlaceholder` is
-        // swapped for the real DiT forward pass once the transformer
-        // port lands.
+        // 3. Text conditioning — REAL text encoders (T5-XXL + CLIP-L)
+        // are a follow-up. For now we feed zero tensors of the right
+        // shape so the transformer's `txtIn` / `vectorIn0` projections
+        // receive the correct dtypes. Output is coherent noise until
+        // real encoders land.
+        let nTxt = 256
+        let txtEmb = MLXArray.zeros([1, nTxt, transformer.config.textDim])
+        let pooledClip = MLXArray.zeros([1, 768])
+
+        // 4. Sampling loop — real FluxDiT forward pass per step.
         let total = scheduler.stepCount
         let startedAt = Date()
         for step in 0..<total {
@@ -106,10 +112,29 @@ public final class ZImage: ImageGenerator, @unchecked Sendable {
                 continuation.yield(.cancelled)
                 return
             }
-            let velocity = velocityPlaceholder(
-                latent: latent,
-                stepIndex: step,
-                scheduler: scheduler
+            // Patchify (B, 16, H/8, W/8) → (B, N, patch²·16).
+            let imgPatched = patchify(
+                latent,
+                patchSize: transformer.config.patchSize,
+                inChannels: transformer.config.inChannels
+            )
+            let timestep = MLXArray([scheduler.timesteps[step]])
+            // Real transformer forward.
+            let velocityPatched = transformer(
+                imgPatched: imgPatched,
+                txt: txtEmb,
+                pooledClip: pooledClip,
+                timestep: timestep,
+                guidance: nil,
+                rope: nil
+            )
+            // Unpatchify back to spatial (B, 16, H/8, W/8).
+            let velocity = unpatchify(
+                velocityPatched,
+                patchSize: transformer.config.patchSize,
+                outChannels: transformer.config.outChannels,
+                height: request.height,
+                width: request.width
             )
             latent = scheduler.step(
                 latent: latent,
@@ -125,12 +150,11 @@ public final class ZImage: ImageGenerator, @unchecked Sendable {
             continuation.yield(.step(step: step + 1, total: total, etaSeconds: eta))
         }
 
-        // 4. Decode latent → pixel space via a placeholder VAE.
-        let image = vaeDecodePlaceholder(
-            latent: latent,
-            targetWidth: request.width,
-            targetHeight: request.height
-        )
+        // 5. Decode latent → pixel space via the real Flux VAE decoder.
+        // Flux applies a scale/shift before the decoder.
+        let rescaled = VAEDecoder.preprocessFluxLatent(latent)
+        let decoded = vae(rescaled)
+        let image = VAEDecoder.postprocess(decoded)
 
         // 5. Write the PNG. `ImageIO.writePNG` is @MainActor so the
         // actor hop happens here.

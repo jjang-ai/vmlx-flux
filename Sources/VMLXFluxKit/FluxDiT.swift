@@ -53,12 +53,13 @@ public final class FluxModulation: Module {
         super.init()
     }
 
-    /// Returns a list of (shift, scale, gate) tuples — 2 for double, 1 for single.
-    /// `vec` is the conditioning embedding (timestep + pooled CLIP + guidance).
-    public func callAsFunction(_ vec: MLXArray) -> [(shift: MLXArray, scale: MLXArray, gate: MLXArray)] {
+    /// Returns a list of `ModTriple` — 2 for double-mode blocks (attn,mlp),
+    /// 1 for single-mode blocks. `vec` is the conditioning embedding
+    /// (time + pooled CLIP + guidance).
+    public func callAsFunction(_ vec: MLXArray) -> [ModTriple] {
         let out = linear(silu(vec))
         let dim = out.dim(-1) / numMods
-        var result: [(MLXArray, MLXArray, MLXArray)] = []
+        var result: [ModTriple] = []
         let mods = numMods / 3
         for i in 0..<mods {
             let base = i * 3
@@ -66,13 +67,30 @@ public final class FluxModulation: Module {
             let scale = out[.ellipsis, (base + 1) * dim ..< (base + 2) * dim]
             let gate  = out[.ellipsis, (base + 2) * dim ..< (base + 3) * dim]
             // Add a sequence dim so we broadcast over tokens: (B, 1, D).
-            result.append((
-                shift.reshaped([shift.dim(0), 1, dim]),
-                scale.reshaped([scale.dim(0), 1, dim]),
-                gate.reshaped([gate.dim(0), 1, dim])
+            result.append(ModTriple(
+                shift: shift.reshaped([shift.dim(0), 1, dim]),
+                scale: scale.reshaped([scale.dim(0), 1, dim]),
+                gate:  gate.reshaped([gate.dim(0), 1, dim])
             ))
         }
-        return result.map { ($0.0, $0.1, $0.2) }
+        return result
+    }
+}
+
+/// Explicit return type for `FluxModulation`. Swift auto-tuple-labeling
+/// inference gets confused when threading named-field tuples through
+/// array literals, so we use a named struct for clarity + type safety.
+/// Not `Sendable` because MLXArray isn't — the module tree is actor-
+/// isolated so cross-actor passing never happens.
+public struct ModTriple {
+    public let shift: MLXArray
+    public let scale: MLXArray
+    public let gate: MLXArray
+
+    public init(shift: MLXArray, scale: MLXArray, gate: MLXArray) {
+        self.shift = shift
+        self.scale = scale
+        self.gate = gate
     }
 }
 
@@ -384,6 +402,27 @@ public struct FluxDiTConfig: Sendable {
     /// FLUX.1 Dev config. 20-step, uses guidance embed for CFG.
     public static let dev = FluxDiTConfig(
         numDoubleBlocks: 19, numSingleBlocks: 38, numHeads: 24,
+        guidanceEmbed: true
+    )
+
+    /// Z-Image Turbo — ~2B param single-encoder variant. The architecture
+    /// is close to Flux Schnell but with fewer blocks + a narrower
+    /// hidden dim. Numbers are approximate until we parse the checkpoint's
+    /// own `config.json` on load.
+    public static let zImageTurbo = FluxDiTConfig(
+        dim: 2048,
+        numDoubleBlocks: 8,
+        numSingleBlocks: 16,
+        numHeads: 16,
+        guidanceEmbed: false
+    )
+
+    /// FLUX.2 Klein — single-encoder, ~6B, similar block count to Flux1.
+    public static let flux2Klein = FluxDiTConfig(
+        dim: 3072,
+        numDoubleBlocks: 19,
+        numSingleBlocks: 38,
+        numHeads: 24,
         guidanceEmbed: true
     )
 }

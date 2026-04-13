@@ -40,7 +40,9 @@ public func sinusoidalTimeEmbedding(
 /// height, width). We expose the simpler 2D variant here as a starting
 /// point; the Flux-specific 3-axis version lives in the Flux1 attention
 /// block where it composes with text-token axis.
-public struct RoPE2D: Sendable {
+/// Not `Sendable` because `MLXArray` isn't. RoPE caches live on the
+/// model actor so cross-isolation passing never happens.
+public struct RoPE2D {
     public let cosCache: MLXArray
     public let sinCache: MLXArray
 

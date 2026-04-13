@@ -106,13 +106,13 @@ public final class VAEResnetBlock: Module {
         var h = norm1(x)
         h = silu(h)
         // MLXNN Conv2d expects (B, H, W, C) layout.
-        h = nhwc(conv1(nchwToNhwc(h)))
+        h = nhwcToNchw(conv1(nchwToNhwc(h)))
         h = norm2(h)
         h = silu(h)
-        h = nhwc(conv2(nchwToNhwc(h)))
+        h = nhwcToNchw(conv2(nchwToNhwc(h)))
         let skip: MLXArray
         if let shortcut = convShortcut {
-            skip = nhwc(shortcut(nchwToNhwc(x)))
+            skip = nhwcToNchw(shortcut(nchwToNhwc(x)))
         } else {
             skip = x
         }
@@ -185,7 +185,7 @@ public final class VAEUpsample: Module {
     public func callAsFunction(_ x: MLXArray) -> MLXArray {
         // Nearest-neighbor 2× via `repeated` on H and W axes.
         let up = upsampleNearest2x(x)
-        return nhwc(conv(nchwToNhwc(up)))
+        return nhwcToNchw(conv(nchwToNhwc(up)))
     }
 }
 
@@ -209,7 +209,7 @@ public func nchwToNhwc(_ x: MLXArray) -> MLXArray {
 }
 
 @inlinable
-public func nhwc(_ x: MLXArray) -> MLXArray {
+public func nhwcToNchw(_ x: MLXArray) -> MLXArray {
     // (B, H, W, C) → (B, C, H, W) — reverse of nchwToNhwc.
     return x.transposed(0, 3, 1, 2)
 }
@@ -299,7 +299,7 @@ public final class VAEDecoder: Module {
 
     public func callAsFunction(_ latent: MLXArray) -> MLXArray {
         // 1. conv_in
-        var h = nhwc(convIn(nchwToNhwc(latent)))
+        var h = nhwcToNchw(convIn(nchwToNhwc(latent)))
 
         // 2. mid block
         h = midResnet1(h)
@@ -319,7 +319,7 @@ public final class VAEDecoder: Module {
         // 4. norm_out → silu → conv_out
         h = normOut(h)
         h = silu(h)
-        h = nhwc(convOut(nchwToNhwc(h)))
+        h = nhwcToNchw(convOut(nchwToNhwc(h)))
 
         // Output is in ~[-1, 1]. Caller rescales to [0, 1] for PNG.
         return h

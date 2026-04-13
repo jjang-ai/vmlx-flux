@@ -85,3 +85,61 @@ public enum LatentSpace {
         return latent.transposed(0, 2, 3, 1).reshaped([b, h * w, c])
     }
 }
+
+// MARK: - Flux-style patchify (2D with patch size > 1)
+//
+// The FluxDiT transformer consumes "patchified" latents where every
+// patch_size × patch_size block of the VAE latent becomes one token.
+// This is the standard DiT patch-embed layout used by FLUX.1, FLUX.2,
+// Qwen-Image, ZImage, and FIBO.
+
+/// Convert a spatial latent `(B, C, H, W)` into a token sequence
+/// `(B, N, patch² · C)` where `N = (H/patch) × (W/patch)`.
+///
+/// Layout: for each token we pack `[C, patch_h * patch_w]` values in
+/// C-major (matches the Black Forest Labs checkpoint convention).
+public func patchify(
+    _ latent: MLXArray,
+    patchSize: Int,
+    inChannels: Int
+) -> MLXArray {
+    let b = latent.dim(0)
+    let c = latent.dim(1)
+    precondition(c == inChannels, "patchify: channel mismatch \(c) vs \(inChannels)")
+    let h = latent.dim(2)
+    let w = latent.dim(3)
+    let ph = h / patchSize
+    let pw = w / patchSize
+    // (B, C, H, W) → (B, C, ph, patch, pw, patch)
+    let r = latent.reshaped([b, c, ph, patchSize, pw, patchSize])
+    // → (B, ph, pw, C, patch, patch)
+    let t = r.transposed(0, 2, 4, 1, 3, 5)
+    // → (B, ph*pw, C*patch*patch)
+    return t.reshaped([b, ph * pw, c * patchSize * patchSize])
+}
+
+/// Inverse of `patchify`. Takes a token sequence
+/// `(B, N, patch² · outChannels)` and reshapes into a spatial latent
+/// `(B, outChannels, H/8, W/8)` — the target VAE latent dims.
+///
+/// `height` and `width` are the ORIGINAL image dimensions in pixels;
+/// the spatial output is `(H/8) / patchSize × (W/8) / patchSize`.
+public func unpatchify(
+    _ patched: MLXArray,
+    patchSize: Int,
+    outChannels: Int,
+    height: Int,
+    width: Int
+) -> MLXArray {
+    let b = patched.dim(0)
+    let latentH = height / 8
+    let latentW = width / 8
+    let ph = latentH / patchSize
+    let pw = latentW / patchSize
+    // (B, N, C*p*p) → (B, ph, pw, C, p, p)
+    let r = patched.reshaped([b, ph, pw, outChannels, patchSize, patchSize])
+    // → (B, C, ph, p, pw, p)
+    let t = r.transposed(0, 3, 1, 4, 2, 5)
+    // → (B, C, latentH, latentW)
+    return t.reshaped([b, outChannels, latentH, latentW])
+}
