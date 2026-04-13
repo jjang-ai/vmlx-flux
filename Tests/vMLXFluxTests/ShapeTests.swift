@@ -1,7 +1,7 @@
 import XCTest
-@testable import VMLXFlux
-@testable import VMLXFluxKit
-@testable import VMLXFluxVideo
+@testable import vMLXFlux
+@testable import vMLXFluxKit
+@testable import vMLXFluxVideo
 
 /// Pure-Swift shape + math tests. We can't run tests that touch MLX
 /// ops because the test binary doesn't have `default.metallib` in its

@@ -1,8 +1,8 @@
 import XCTest
-@testable import VMLXFlux
-@testable import VMLXFluxKit
-@testable import VMLXFluxModels
-@testable import VMLXFluxVideo
+@testable import vMLXFlux
+@testable import vMLXFluxKit
+@testable import vMLXFluxModels
+@testable import vMLXFluxVideo
 
 final class RegistryTests: XCTestCase {
 

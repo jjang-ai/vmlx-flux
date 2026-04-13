@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import MLX
 import MLXNN
-import VMLXFluxKit
+import vMLXFluxKit
 
 // MARK: - Wan 2.x DiT transformer
 //

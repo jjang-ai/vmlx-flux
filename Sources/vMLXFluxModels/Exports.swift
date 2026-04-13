@@ -1,5 +1,5 @@
 // Umbrella file for VMLXFluxModels. Re-exports the per-model public
-// types so `import VMLXFluxModels` gives callers everything at once.
+// types so `import vMLXFluxModels` gives callers everything at once.
 //
 // Registration is done via `_register` statics inside each model file.
 // This file just touches each type so the static initializer runs.

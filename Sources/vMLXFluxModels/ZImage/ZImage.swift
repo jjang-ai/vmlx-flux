@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import MLX
 import MLXRandom
-import VMLXFluxKit
+import vMLXFluxKit
 
 // Z-Image-Turbo — single-encoder turbo model, ~2B params, 4-8 steps.
 // Python source: `mflux.models.z_image.variants.z_image.ZImage`.

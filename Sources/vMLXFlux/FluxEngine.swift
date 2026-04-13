@@ -1,7 +1,7 @@
 import Foundation
-@_exported import VMLXFluxKit
-@_exported import VMLXFluxModels
-@_exported import VMLXFluxVideo
+@_exported import vMLXFluxKit
+@_exported import vMLXFluxModels
+@_exported import vMLXFluxVideo
 
 /// Top-level facade for vmlx-flux. One import, one actor, one API.
 ///

@@ -1,5 +1,5 @@
 import Foundation
-import VMLXFluxKit
+import vMLXFluxKit
 
 // SeedVR2 — super-resolution / upscale. Python source:
 // `mflux.models.seedvr2.variants.upscale.seedvr2.SeedVR2`.

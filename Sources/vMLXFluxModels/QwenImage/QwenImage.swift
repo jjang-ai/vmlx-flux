@@ -1,22 +1,20 @@
 import Foundation
-import VMLXFluxKit
+import vMLXFluxKit
 
-// FLUX.2 Klein family — second-generation single-encoder Flux. Python
-// source: `mflux.models.flux2.variants.txt2img.flux2_klein.Flux2Klein`
-// and `flux2_klein_edit.Flux2KleinEdit`.
+// Qwen-Image (gen) + Qwen-Image-Edit — Alibaba's image model family.
+// Python source: `mflux.models.qwen.variants.{txt2img.qwen_image, edit.qwen_image_edit}`.
 
-public final class Flux2Klein: ImageGenerator, @unchecked Sendable {
+public final class QwenImage: ImageGenerator, @unchecked Sendable {
     public static let _register: Void = {
         ModelRegistry.register(ModelEntry(
-            name: "flux2-klein",
-            displayName: "FLUX.2 Klein",
+            name: "qwen-image",
+            displayName: "Qwen-Image",
             kind: .imageGen,
-            defaultSteps: 28,
-            defaultGuidance: 3.5,
-            supportsLoRA: false,
+            defaultSteps: 30,
+            defaultGuidance: 4.0,
             loader: { path, quant in
-                _ = Flux2Klein._register
-                return try Flux2Klein(modelPath: path, quantize: quant)
+                _ = QwenImage._register
+                return try QwenImage(modelPath: path, quantize: quant)
             }
         ))
     }()
@@ -36,22 +34,22 @@ public final class Flux2Klein: ImageGenerator, @unchecked Sendable {
     public func generate(_ request: ImageGenRequest) -> AsyncThrowingStream<ImageGenEvent, Error> {
         AsyncThrowingStream { continuation in
             continuation.finish(throwing: FluxError.notImplemented(
-                "Flux2Klein.generate — port from mflux/models/flux2/variants/txt2img/flux2_klein.py"))
+                "QwenImage.generate — port from mflux/models/qwen/variants/txt2img/qwen_image.py"))
         }
     }
 }
 
-public final class Flux2KleinEdit: ImageEditor, @unchecked Sendable {
+public final class QwenImageEdit: ImageEditor, @unchecked Sendable {
     public static let _register: Void = {
         ModelRegistry.register(ModelEntry(
-            name: "flux2-klein-edit",
-            displayName: "FLUX.2 Klein Edit",
+            name: "qwen-image-edit",
+            displayName: "Qwen-Image-Edit",
             kind: .imageEdit,
-            defaultSteps: 28,
-            defaultGuidance: 3.5,
+            defaultSteps: 30,
+            defaultGuidance: 4.0,
             loader: { path, quant in
-                _ = Flux2KleinEdit._register
-                return try Flux2KleinEdit(modelPath: path, quantize: quant)
+                _ = QwenImageEdit._register
+                return try QwenImageEdit(modelPath: path, quantize: quant)
             }
         ))
     }()
@@ -71,7 +69,7 @@ public final class Flux2KleinEdit: ImageEditor, @unchecked Sendable {
     public func edit(_ request: ImageEditRequest) -> AsyncThrowingStream<ImageGenEvent, Error> {
         AsyncThrowingStream { continuation in
             continuation.finish(throwing: FluxError.notImplemented(
-                "Flux2KleinEdit.edit — port from mflux/models/flux2/variants/edit/flux2_klein_edit.py"))
+                "QwenImageEdit.edit — port from mflux/models/qwen/variants/edit/qwen_image_edit.py"))
         }
     }
 }

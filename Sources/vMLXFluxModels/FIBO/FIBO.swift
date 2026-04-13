@@ -1,5 +1,5 @@
 import Foundation
-import VMLXFluxKit
+import vMLXFluxKit
 
 // FIBO — Python source: `mflux.models.fibo.variants.txt2img.fibo.FIBO`.
 

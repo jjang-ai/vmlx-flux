@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import MLX
 import MLXRandom
-import VMLXFluxKit
+import vMLXFluxKit
 
 // MARK: - WAN (Wan 2.1 / Wan 2.2) — Apple Silicon video generation
 //

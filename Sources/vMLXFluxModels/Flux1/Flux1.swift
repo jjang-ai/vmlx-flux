@@ -1,5 +1,5 @@
 import Foundation
-import VMLXFluxKit
+import vMLXFluxKit
 
 // MARK: - Flux1
 //

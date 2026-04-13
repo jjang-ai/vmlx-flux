@@ -1,6 +1,6 @@
 import Foundation
 @preconcurrency import MLX
-import VMLXFluxKit
+import vMLXFluxKit
 #if canImport(AppKit)
 import AppKit
 import AVFoundation
