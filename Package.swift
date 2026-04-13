@@ -31,8 +31,12 @@ let package = Package(
         .library(name: "VMLXFluxVideo", targets: ["VMLXFluxVideo"]),
     ],
     dependencies: [
-        // Apple Silicon tensor ops — same fork vmlx-swift-lm pins.
+        // Apple Silicon tensor ops — same fork vmlx-swift-lm pins so both
+        // packages share one MLX runtime when co-installed in vMLX.
         .package(url: "https://github.com/osaurus-ai/mlx-swift", branch: "osaurus-0.31.3"),
+        // Sibling package — reused for JangConfig / JangLoader / TQDiskSerializer
+        // so we don't re-port 533 lines of JANG v2 parsing.
+        .package(path: "../vmlx-swift-lm"),
         // Tokenizer + HuggingFace Hub loader.
         .package(url: "https://github.com/huggingface/swift-transformers", from: "0.1.21"),
     ],
@@ -49,6 +53,7 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXRandom", package: "mlx-swift"),
+                .product(name: "MLXLMCommon", package: "vmlx-swift-lm"),
                 .product(name: "Transformers", package: "swift-transformers"),
             ],
             path: "Sources/VMLXFluxKit"
