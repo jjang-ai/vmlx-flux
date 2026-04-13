@@ -32,6 +32,8 @@ public final class ZImage: ImageGenerator, @unchecked Sendable {
     public let modelPath: URL
     public let quantize: Int?
     public let loadedWeights: LoadedWeights
+    public let transformer: FluxDiTModel
+    public let vae: VAEDecoder
 
     public init(modelPath: URL, quantize: Int?) throws {
         self.modelPath = modelPath
@@ -44,6 +46,14 @@ public final class ZImage: ImageGenerator, @unchecked Sendable {
         // JANG config / missing-shard errors at `.load` time rather than
         // on the first generate call.
         self.loadedWeights = try WeightLoader.load(from: modelPath)
+
+        // Z-Image uses a smaller Flux-style transformer (~2B vs Flux1's
+        // 12B). The exact config comes from the checkpoint's config.json
+        // — for now we use the schnell topology as a starting point and
+        // will swap when config parsing lands.
+        self.transformer = FluxDiTModel(config: .schnell)
+        // Flux-family VAE — shared with Flux1/Flux2/FIBO/Qwen.
+        self.vae = VAEDecoder()
     }
 
     public func generate(_ request: ImageGenRequest) -> AsyncThrowingStream<ImageGenEvent, Error> {
