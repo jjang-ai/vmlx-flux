@@ -322,7 +322,8 @@ Probe: `Z-Image-Turbo-mflux-4bit` from internal SSD, seed 7, 512×512, 8 steps,
 | **Prompt-sensitivity** (turn2 mountain seed7 vs apple) | different SHA `0336dc…` ✅ — text encoder conditions output |
 | **Visual coherence** | turn1/3 = coherent photo of a red apple on a wooden table; turn2 = coherent watercolor of a snowy blue mountain ✅ |
 | **Style control** | "photograph" vs "watercolor painting" both honored ✅ |
-| **Speed** | ~4.1–4.5 s per 512px/8-step image (4-bit, M5 Max) |
+| **Speed** | ~4.1–4.5 s per 512px/8-step; ~18.7 s per 1024px/8-step (4-bit, M5 Max) |
+| **Native 1024px** | coherent photorealistic cabin-in-pine-forest-at-sunset, prompt-accurate ✅ |
 | **Stability** | no GPU timeout from SSD; USB-resident weights DO time out (§8) |
 
 **Conclusion:** the native Swift Z-Image pipeline (text encoder + DiT + VAE + 4-bit
