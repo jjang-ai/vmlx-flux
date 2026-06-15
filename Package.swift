@@ -32,16 +32,24 @@ let package = Package(
         .library(name: "vMLXFluxKit", targets: ["vMLXFluxKit"]),
         .library(name: "vMLXFluxModels", targets: ["vMLXFluxModels"]),
         .library(name: "vMLXFluxVideo", targets: ["vMLXFluxVideo"]),
+        // Local scan / load / generate CLI for native verification.
+        .executable(name: "vmlxflux-probe", targets: ["vMLXFluxProbe"]),
     ],
     dependencies: [
         // Apple Silicon tensor ops — same fork vmlx-swift-lm pins so both
         // packages share one MLX runtime when co-installed in vMLX.
-        .package(url: "https://github.com/osaurus-ai/mlx-swift", branch: "osaurus-0.31.3"),
+        // Pin the EXACT mlx-swift revision vmlx-swift-lm uses so co-installed
+        // packages resolve one MLX runtime (a drifting branch ref conflicts with
+        // vmlx-swift-lm's revision pin). Keep in lockstep with vmlx-swift-lm.
+        .package(url: "https://github.com/osaurus-ai/mlx-swift", revision: "0a56f9041d56b4b8161f67a6cbd540ae66efc9fd"),
         // Sibling package — reused for JangConfig / JangLoader / TQDiskSerializer
         // so we don't re-port 533 lines of JANG v2 parsing.
         .package(path: "../vmlx-swift-lm"),
-        // Tokenizer + HuggingFace Hub loader.
-        .package(url: "https://github.com/huggingface/swift-transformers", from: "0.1.21"),
+        // Tokenizer + HuggingFace Hub loader. Use the SAME osaurus-ai fork +
+        // revision vmlx-swift-lm pins so co-installed packages resolve one
+        // swift-transformers (the fork adds the `strict:` tokenizer-load param +
+        // a `Tokenizers` product). Keep in lockstep with vmlx-swift-lm.
+        .package(url: "https://github.com/osaurus-ai/swift-transformers", revision: "087a66b17e482220b94909c5cf98688383ae481a"),
     ],
     targets: [
         // MARK: - vMLXFluxKit — core types + math + schedulers
@@ -73,6 +81,9 @@ let package = Package(
                 "vMLXFluxKit",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
+                // `import Tokenizers` is vended by the Transformers umbrella product.
+                .product(name: "Transformers", package: "swift-transformers"),
             ],
             path: "Sources/vMLXFluxModels"
         ),
@@ -87,6 +98,8 @@ let package = Package(
             dependencies: [
                 "vMLXFluxKit",
                 .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
             ],
             path: "Sources/vMLXFluxVideo"
         ),
@@ -104,6 +117,13 @@ let package = Package(
                 "vMLXFluxVideo",
             ],
             path: "Sources/vMLXFlux"
+        ),
+
+        // MARK: - vMLXFluxProbe — verification CLI
+        .executableTarget(
+            name: "vMLXFluxProbe",
+            dependencies: ["vMLXFlux", "vMLXFluxKit"],
+            path: "Sources/vMLXFluxProbe"
         ),
 
         // MARK: - Tests

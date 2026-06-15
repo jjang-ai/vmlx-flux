@@ -1,10 +1,34 @@
 # vmlx-flux Progress Tracker
 
-**Last session**: 2026-04-13
-**Branch**: `main`
-**Last commit**: `fdc1f68` (lowercase-v rename + ARCHITECTURE.md)
-**Build**: `swift build` ✅ clean · `swift test` ✅ **16/16** passing
+**Last session**: 2026-06-15
+**Branch**: `native-zimage-proven` (off `main`)
+**Build**: `swift build` ✅ · `vmlxflux-probe` builds standalone + vendored in vmlx-swift
 **Repo**: https://github.com/jjang-ai/vmlx-flux
+
+### 2026-06-15 — native Z-Image proven + vendored into vmlx-swift
+- **`ZImageNative.swift` (NEW, 1202 lines)**: full native Z-Image-Turbo pipeline —
+  Qwen-style text encoder, patchify + caption-concat DiT (noise/context refiners +
+  unified layers, RoPE, adaLN, timestep embed), `AutoencoderKL` VAE decode, 4-bit
+  mflux weight decode. `ZImage.swift` now delegates to `ZImageNativePipeline`
+  (its old velocity/VAE placeholders are dead code).
+- **`LocalModelStore.swift` (NEW)**: `MLXStudioModelStore` scans
+  `~/.mlxstudio/models/image` for mflux/Diffusers bundles, resolves canonical
+  names, reports readiness + native_runtime_status. No silent downloads.
+- **`vmlxflux-probe` (NEW exe)**: scan / load / generate / `--matrix` CLI.
+- **LIVE PROOF (z-image-turbo, 4-bit, SSD, 512px/8-step):** same-seed/same-prompt
+  byte-deterministic; same-seed/different-prompt → distinct coherent prompt-accurate
+  images (photo apple vs watercolor mountain) at ~4 s/image. The pre-`ZImageNative`
+  "scaffold_generates_png_noise" verdict is SUPERSEDED.
+- **mlx-swift pin** changed branch→exact revision `0a56f904…` to match vmlx-swift-lm
+  (a drifting branch ref conflicted with vmlx-swift-lm's revision pin on co-install).
+- Now also **vendored into vmlx-swift** (`Libraries/vMLXFlux*`, in-tree targets,
+  `import Tokenizers`→`VMLXTokenizers`) so the whole vMLX stack shares one MLX binary.
+  See `OSAURUS_VMLX_FLUX_INTEGRATION_SPEC.md` for the osaurus wiring spec.
+- Still `notImplemented`: qwen-image(-edit), flux2-klein, flux1-*, seedvr2, wan-2.x.
+
+---
+
+**Prior session**: 2026-04-13 · last commit `fdc1f68` (lowercase-v rename + ARCHITECTURE.md) · `swift test` 16/16
 
 This file is the single source of truth for **what's done** and **what's
 next** in vmlx-flux. Start here when resuming the project. The LLM/chat/

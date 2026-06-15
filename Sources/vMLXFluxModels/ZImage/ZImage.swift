@@ -24,7 +24,7 @@ public final class ZImage: ImageGenerator, @unchecked Sendable {
             supportsLoRA: false,
             loader: { path, quant in
                 _ = ZImage._register
-                return try ZImage(modelPath: path, quantize: quant)
+                return try await ZImage(modelPath: path, quantize: quant)
             }
         ))
     }()
@@ -32,10 +32,9 @@ public final class ZImage: ImageGenerator, @unchecked Sendable {
     public let modelPath: URL
     public let quantize: Int?
     public let loadedWeights: LoadedWeights
-    public let transformer: FluxDiTModel
-    public let vae: VAEDecoder
+    private let pipeline: ZImageNativePipeline
 
-    public init(modelPath: URL, quantize: Int?) throws {
+    public init(modelPath: URL, quantize: Int?) async throws {
         self.modelPath = modelPath
         self.quantize = quantize
         _ = Self._register
@@ -47,13 +46,9 @@ public final class ZImage: ImageGenerator, @unchecked Sendable {
         // on the first generate call.
         self.loadedWeights = try WeightLoader.load(from: modelPath)
 
-        // Z-Image Turbo — ~2B params, single-encoder. Uses the
-        // `zImageTurbo` preset which is Flux-style but narrower and
-        // shallower. Real hyperparams will come from parsing the
-        // checkpoint's `config.json` when the per-model loader lands.
-        self.transformer = FluxDiTModel(config: .zImageTurbo)
-        // Flux-family VAE — shared with Flux1/Flux2/FIBO/Qwen.
-        self.vae = VAEDecoder()
+        self.pipeline = try await ZImageNativePipeline(
+            modelPath: modelPath,
+            loadedWeights: loadedWeights)
     }
 
     public func generate(_ request: ImageGenRequest) -> AsyncThrowingStream<ImageGenEvent, Error> {
@@ -77,90 +72,22 @@ public final class ZImage: ImageGenerator, @unchecked Sendable {
         _ request: ImageGenRequest,
         continuation: AsyncThrowingStream<ImageGenEvent, Error>.Continuation
     ) async throws {
-        // 1. Build the scheduler at the requested step count.
-        let scheduler = FlowMatchEulerScheduler(
-            steps: request.steps,
-            imageSeqLen: (request.width / 8) * (request.height / 8),
-            baseShift: 0.5,
-            maxShift: 1.15
-        )
-
-        // 2. Allocate the initial noise latent. The Flux-family VAE
-        // uses 16-channel latents (NOT 4 like SD/SDXL), and the DiT
-        // transformer's `imgIn: Linear(patch²·16, dim)` hard-codes
-        // that channel count. Sourcing from `transformer.config.inChannels`
-        // keeps the two in sync and prevents a shape mismatch at
-        // patchify time.
-        var latent = LatentSpace.initialNoise(
+        guard request.steps > 0 else {
+            throw FluxError.invalidRequest("Z-Image steps must be greater than zero")
+        }
+        let image = try await pipeline.generate(
+            prompt: request.prompt,
+            negativePrompt: request.negativePrompt,
+            guidance: request.guidance,
             width: request.width,
             height: request.height,
-            layout: .spatial(channels: transformer.config.inChannels),
-            batchSize: 1,
+            steps: request.steps,
             seed: request.seed
-        )
-
-        // 3. Text conditioning — REAL text encoders (T5-XXL + CLIP-L)
-        // are a follow-up. For now we feed zero tensors of the right
-        // shape so the transformer's `txtIn` / `vectorIn0` projections
-        // receive the correct dtypes. Output is coherent noise until
-        // real encoders land.
-        let nTxt = 256
-        let txtEmb = MLXArray.zeros([1, nTxt, transformer.config.textDim])
-        let pooledClip = MLXArray.zeros([1, 768])
-
-        // 4. Sampling loop — real FluxDiT forward pass per step.
-        let total = scheduler.stepCount
-        let startedAt = Date()
-        for step in 0..<total {
-            if Task.isCancelled {
-                continuation.yield(.cancelled)
-                return
-            }
-            // Patchify (B, 16, H/8, W/8) → (B, N, patch²·16).
-            let imgPatched = patchify(
-                latent,
-                patchSize: transformer.config.patchSize,
-                inChannels: transformer.config.inChannels
-            )
-            let timestep = MLXArray([scheduler.timesteps[step]])
-            // Real transformer forward.
-            let velocityPatched = transformer(
-                imgPatched: imgPatched,
-                txt: txtEmb,
-                pooledClip: pooledClip,
-                timestep: timestep,
-                guidance: nil,
-                rope: nil
-            )
-            // Unpatchify back to spatial (B, 16, H/8, W/8).
-            let velocity = unpatchify(
-                velocityPatched,
-                patchSize: transformer.config.patchSize,
-                outChannels: transformer.config.outChannels,
-                height: request.height,
-                width: request.width
-            )
-            latent = scheduler.step(
-                latent: latent,
-                velocity: velocity,
-                stepIndex: step
-            )
-            // MLX is lazy — reading the shape forces materialization.
-            _ = latent.shape
-
-            let elapsed = Date().timeIntervalSince(startedAt)
-            let perStep = elapsed / Double(step + 1)
-            let eta = perStep * Double(total - step - 1)
-            continuation.yield(.step(step: step + 1, total: total, etaSeconds: eta))
+        ) { step, total, eta in
+            continuation.yield(.step(step: step, total: total, etaSeconds: eta))
         }
 
-        // 5. Decode latent → pixel space via the real Flux VAE decoder.
-        // Flux applies a scale/shift before the decoder.
-        let rescaled = VAEDecoder.preprocessFluxLatent(latent)
-        let decoded = vae(rescaled)
-        let image = VAEDecoder.postprocess(decoded)
-
-        // 5. Write the PNG. `ImageIO.writePNG` is @MainActor so the
+        // Write the PNG. `ImageIO.writePNG` is @MainActor so the
         // actor hop happens here.
         let outURL = try await MainActor.run {
             try ImageIO.writePNG(

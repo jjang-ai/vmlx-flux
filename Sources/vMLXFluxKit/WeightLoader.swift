@@ -27,10 +27,16 @@ import MLXNN
 
 public struct LoadedWeights: Sendable {
     public let weights: [String: MLXArray]
+    public let componentWeights: [String: [String: MLXArray]]
     public let jangConfig: MLXLMCommon.JangConfig?
 
-    public init(weights: [String: MLXArray], jangConfig: MLXLMCommon.JangConfig? = nil) {
+    public init(
+        weights: [String: MLXArray],
+        componentWeights: [String: [String: MLXArray]] = [:],
+        jangConfig: MLXLMCommon.JangConfig? = nil
+    ) {
         self.weights = weights
+        self.componentWeights = componentWeights
         self.jangConfig = jangConfig
     }
 }
@@ -46,31 +52,73 @@ public enum WeightLoader {
         // the shard layout.
         let jang = try JangBridge.detect(at: directory)
 
-        // Enumerate safetensors shards.
-        let shards = try enumerateShards(in: directory)
-        guard !shards.isEmpty else {
+        let componentShardGroups = try enumerateShardGroups(in: directory)
+        guard !componentShardGroups.isEmpty else {
             throw FluxError.weightsNotFound(directory)
         }
 
-        // Merge all shards into a single dict.
         var merged: [String: MLXArray] = [:]
-        for shard in shards {
-            let arrays = try MLX.loadArrays(url: shard)
-            for (k, v) in arrays {
-                merged[k] = v
+        var byComponent: [String: [String: MLXArray]] = [:]
+        for group in componentShardGroups {
+            var componentWeights: [String: MLXArray] = [:]
+            for shard in group.shards {
+                let arrays = try MLX.loadArrays(url: shard)
+                for (key, value) in arrays {
+                    componentWeights[key] = value
+                    let mergedKey = group.component == "root"
+                        ? key
+                        : "\(group.component).\(key)"
+                    merged[mergedKey] = value
+                }
             }
+            byComponent[group.component] = componentWeights
         }
 
-        return LoadedWeights(weights: merged, jangConfig: jang.config)
+        return LoadedWeights(
+            weights: merged,
+            componentWeights: byComponent,
+            jangConfig: jang.config)
     }
 
-    /// Enumerate .safetensors files in the directory. Prefers the
-    /// `model.safetensors.index.json` manifest when present (so we load
-    /// shards in deterministic order), falling back to a sorted glob.
+    private struct ShardGroup {
+        let component: String
+        let shards: [URL]
+    }
+
+    /// Enumerate .safetensors files in the directory and known
+    /// Diffusers/MFlux component subdirectories. Prefers each
+    /// `model.safetensors.index.json` manifest when present so shards
+    /// are deterministic, falling back to sorted direct `.safetensors`.
+    private static func enumerateShardGroups(in directory: URL) throws -> [ShardGroup] {
+        var groups: [ShardGroup] = []
+        let rootShards = try enumerateShards(in: directory)
+        if !rootShards.isEmpty {
+            groups.append(ShardGroup(component: "root", shards: rootShards))
+        }
+        for component in ["transformer", "text_encoder", "text_encoder_2", "vae"] {
+            let componentURL = directory.appendingPathComponent(component, isDirectory: true)
+            let shards = try enumerateShards(in: componentURL)
+            if !shards.isEmpty {
+                groups.append(ShardGroup(component: component, shards: shards))
+            }
+        }
+        return groups
+    }
+
     private static func enumerateShards(in directory: URL) throws -> [URL] {
         let fm = FileManager.default
-        let indexURL = directory.appendingPathComponent("model.safetensors.index.json")
-        if fm.fileExists(atPath: indexURL.path) {
+        var isDirectory: ObjCBool = false
+        guard fm.fileExists(atPath: directory.path, isDirectory: &isDirectory),
+              isDirectory.boolValue
+        else { return [] }
+        let indexCandidates = [
+            "model.safetensors.index.json",
+            "diffusion_pytorch_model.safetensors.index.json",
+        ]
+        if let indexURL = indexCandidates
+            .map({ directory.appendingPathComponent($0) })
+            .first(where: { fm.fileExists(atPath: $0.path) })
+        {
             // Parse the index to get the unique set of shards.
             let data = try Data(contentsOf: indexURL)
             if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

@@ -8,3 +8,6 @@ xcuserdata/
 *.moved-aside
 DerivedData/
 .netrc
+
+# Local probe artifacts (scan/load/generate outputs)
+docs/local/

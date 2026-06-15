@@ -59,6 +59,35 @@ public actor FluxEngine {
         self.lastLoadedName = name
     }
 
+    /// Resolve and load a local image-generation bundle from
+    /// `~/.mlxstudio/models/image` or a caller-supplied model store.
+    ///
+    /// This keeps the "no silent downloads" rule intact while letting vMLX
+    /// callers use canonical model names instead of hard-coded local paths.
+    public func load(
+        name: String,
+        from store: MLXStudioModelStore = MLXStudioModelStore()
+    ) async throws -> LocalFluxModel {
+        VMLXFluxModels.registerAll()
+        VMLXFluxVideo.registerAll()
+        guard let local = try store.resolve(name: name) else {
+            throw FluxError.localModelNotFound(name, store.root)
+        }
+        guard local.canEnterNativeLoadPath else {
+            throw FluxError.localModelIncomplete(
+                local.directory,
+                reasons: local.blockedReasons)
+        }
+        guard let canonicalName = local.canonicalName else {
+            throw FluxError.unknownModel(local.directoryName)
+        }
+        try await load(
+            name: canonicalName,
+            modelPath: local.directory,
+            quantize: local.quantizationBits)
+        return local
+    }
+
     /// Unload the current model and release weights.
     public func unload() {
         self.loaded = nil

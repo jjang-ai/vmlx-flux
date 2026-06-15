@@ -52,6 +52,8 @@ public enum FluxError: Error, CustomStringConvertible {
     case notLoaded
     case wrongModelKind(expected: String, actual: String)
     case weightsNotFound(URL)
+    case localModelNotFound(String, URL)
+    case localModelIncomplete(URL, reasons: [String])
     case notImplemented(String)
     case invalidRequest(String)
 
@@ -62,6 +64,10 @@ public enum FluxError: Error, CustomStringConvertible {
         case .wrongModelKind(let e, let a):
             return "wrong model kind: expected \(e), got \(a)"
         case .weightsNotFound(let u): return "weights not found at \(u.path)"
+        case .localModelNotFound(let name, let root):
+            return "local model not found: \(name) under \(root.path)"
+        case .localModelIncomplete(let u, let reasons):
+            return "local model incomplete at \(u.path): \(reasons.joined(separator: ", "))"
         case .notImplemented(let s): return "not implemented: \(s)"
         case .invalidRequest(let s): return "invalid request: \(s)"
         }

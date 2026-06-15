@@ -127,18 +127,28 @@ for try await event in engine.generate(request) {
 
 ## Status
 
-**Scaffold complete.** All 11 image models + 2 video models register into `ModelRegistry` at launch, have valid type signatures, and expose the `FluxEngine` entry point.
+**`z-image-turbo` is a working native pipeline** — `ZImageNative.swift` ports the
+full model (Qwen-style text encoder + patchify/RoPE/adaLN DiT with noise/context
+refiners + `AutoencoderKL` VAE + 4-bit mflux weight decode). Live-proven
+2026-06-15 on the 4-bit mflux bundle: same-seed/same-prompt is byte-deterministic,
+same-seed/different-prompt yields distinct coherent prompt-accurate images
+(photographic apple vs watercolor mountain) at ~4 s per 512px/8-step image. Now
+also vendored into `vmlx-swift` as in-tree targets so the whole vMLX stack shares
+one MLX runtime — see `OSAURUS_VMLX_FLUX_INTEGRATION_SPEC.md` for the osaurus
+wiring spec. `vmlxflux-probe` is the scan/load/generate verification CLI.
 
-**Every model's generation body currently throws `FluxError.notImplemented`.** The real ports need:
+**The remaining models register but their generation bodies still throw
+`FluxError.notImplemented`** (qwen-image(-edit), flux2-klein, flux1-*, seedvr2,
+wan-2.x). Their ports need:
 
 1. **FluxTransformer** (Dual-encoder Flux1 + single-encoder Flux2, DiT)
 2. **T5-XXL text encoder** (shared across Flux + Qwen + Wan)
 3. **CLIP-L text encoder** (Flux1 only)
-4. **Autoencoder / VAE** (image encode/decode)
+4. **Autoencoder / VAE** (the Z-Image VAE decoder is a reusable reference)
 5. **3D causal VAE** (video, future)
-6. **Flow-matching scheduler** (Euler, sigmas from 0→1)
-7. **Safetensors weight loader** (with 4/8-bit quantization support)
-8. **Tokenizer round-trip** via swift-transformers
+6. **Flow-matching scheduler** (Euler, sigmas 0→1 — done, shared)
+7. **Safetensors weight loader** (4/8-bit — done for the mflux/JANG path)
+8. **Tokenizer round-trip** via swift-transformers (done for Z-Image)
 
 All of these plug into the existing `FluxEngine` + `ImageGenerator` protocol without API changes.
 
