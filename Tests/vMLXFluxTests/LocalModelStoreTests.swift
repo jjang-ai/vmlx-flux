@@ -37,7 +37,12 @@ final class LocalModelStoreTests: XCTestCase {
         let byCanonical = try store.resolve(name: "qwen-image")
         let byDirectory = try store.resolve(name: "qwen-image-mflux-4bit")
 
-        XCTAssertEqual(byCanonical?.directory, model)
+        // Compare bundle identity (last path component) rather than the full
+        // absolute URL: the store canonicalizes the macOS /var -> /private/var
+        // temp-dir symlink, so absolute-URL equality is brittle.
+        XCTAssertEqual(byCanonical?.directory.lastPathComponent, model.lastPathComponent)
+        XCTAssertEqual(byCanonical?.canonicalName, "qwen-image")
+        XCTAssertEqual(byDirectory?.directory.lastPathComponent, model.lastPathComponent)
         XCTAssertEqual(byDirectory?.canonicalName, "qwen-image")
     }
 
@@ -55,7 +60,7 @@ final class LocalModelStoreTests: XCTestCase {
             _ = try await engine.load(name: "z-image-turbo", from: store)
             XCTFail("expected incomplete local model rejection")
         } catch FluxError.localModelIncomplete(let url, let reasons) {
-            XCTAssertEqual(url, model)
+            XCTAssertEqual(url.lastPathComponent, model.lastPathComponent)
             XCTAssertTrue(reasons.contains("no safetensors found"))
             XCTAssertTrue(reasons.contains("missing transformer"))
         } catch {
