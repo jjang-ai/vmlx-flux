@@ -326,10 +326,21 @@ Probe: `Z-Image-Turbo-mflux-4bit` from internal SSD, seed 7, 512×512, 8 steps,
 | **Native 1024px** | coherent photorealistic cabin-in-pine-forest-at-sunset, prompt-accurate ✅ |
 | **Stability** | no GPU timeout from SSD; USB-resident weights DO time out (§8) |
 
+**Expanded coverage (2026-06-15, same bundle):**
+
+| Dimension | Result |
+|---|---|
+| **CFG / negative-prompt path** (`guidance 3.0` + negative) | coherent prompt-accurate apple; 7.6 s vs 4.2 s at guidance 0 — the ~1.8× confirms two forward passes per step (real classifier-free guidance). Previously-untested `negativeEncodings` branch ✅ |
+| **Seed sensitivity** (same prompt, seed 100 vs 200) | distinct coherent images per seed ✅ |
+| **Resolution/speed curve** (8-step, guidance 0) | 256²→1.3 s · 512²→4.3 s · 768²→10.6 s · 1024²→20.8 s |
+| **Unit tests** (`swift test --filter vMLXFluxTests`, Xcode toolchain) | 19/19 green |
+
+Probe gained `--guidance` and `--negative` flags to drive the CFG path.
+
 **Conclusion:** the native Swift Z-Image pipeline (text encoder + DiT + VAE + 4-bit
-decode) produces real, deterministic, prompt-conditioned images. z-image-turbo is
-**production-compatible** — the May-16 "scaffold_generates_png_noise" verdict is
-superseded; that predated `ZImageNative.swift`.
+decode) produces real, deterministic, prompt-conditioned images across resolutions,
+seeds, and the CFG path. z-image-turbo is **production-compatible** — the May-16
+"scaffold_generates_png_noise" verdict is superseded; that predated `ZImageNative.swift`.
 
 ---
 

@@ -164,10 +164,11 @@ struct VMLXFluxProbe {
                 for (index, prompt) in options.turns.enumerated() {
                     let request = ImageGenRequest(
                         prompt: prompt,
+                        negativePrompt: options.negativePrompt,
                         width: options.width,
                         height: options.height,
                         steps: options.steps,
-                        guidance: loaded.canonicalName == "z-image-turbo" ? 0 : 3.5,
+                        guidance: options.guidance ?? (loaded.canonicalName == "z-image-turbo" ? 0 : 3.5),
                         seed: options.seed ?? UInt64(index + 1),
                         outputDir: options.outputDirectory)
                     let turnStart = Date()
@@ -436,6 +437,8 @@ struct ProbeOptions {
     var height = 256
     var steps = 1
     var seed: UInt64?
+    var guidance: Float?
+    var negativePrompt: String?
     var turns = Self.defaultTurns
 
     init(arguments: [String]) throws {
@@ -480,6 +483,12 @@ struct ProbeOptions {
                 let value = try Self.value(after: arg, in: arguments, index: &index)
                 guard let parsed = UInt64(value) else { throw ProbeError("invalid --seed") }
                 seed = parsed
+            case "--guidance":
+                let value = try Self.value(after: arg, in: arguments, index: &index)
+                guard let parsed = Float(value) else { throw ProbeError("invalid --guidance") }
+                guidance = parsed
+            case "--negative":
+                negativePrompt = try Self.value(after: arg, in: arguments, index: &index)
             case "--turn":
                 let turn = try Self.value(after: arg, in: arguments, index: &index)
                 if turns == Self.defaultTurns {
