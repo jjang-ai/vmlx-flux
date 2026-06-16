@@ -665,7 +665,7 @@ struct VMLXFluxProbe {
                 ]
             }
             return [
-                "qwen-image 4-bit and 6-bit are live-proven; this quant variant has not completed live generation",
+                "qwen-image 4-bit is current-5c7 live-proven and 6-bit has older a188 generation proof; this quant variant has not completed live generation",
                 "live coherent text-to-image proof is missing for this quant variant",
             ]
         case "qwen-image-edit":
