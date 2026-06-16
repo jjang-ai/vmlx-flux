@@ -481,8 +481,8 @@ Full per-model transcription specs are in `docs/FLUX_SCHNELL_PORT_PLAN.md` and `
   `9f1faea11aee78f17041c5bed6da039e70c11d05`.
 - `osaurus-ai/vmlx-swift` **PR #68** — current-main image proof docs merged to
   main. Merge commit: `66f328322c41ce51881a9ab3bb630c1aeee114b8`.
-- `osaurus-ai/vmlx-swift` direct main commit **`e0f3ccff`** — Ideogram fp8
-  native generation, current e0f proof/docs, and probe status refresh.
+- `osaurus-ai/vmlx-swift` main commit **`e0f3ccff`** — Ideogram fp8 native
+  generation baseline used for the current e0f proof/docs refresh.
 - `jjang-ai/vmlx-flux` branch **`native-zimage-proven`** — standalone mirror of
   the native work. Current branch head includes the image source/docs mirror and
   root Osaurus image API spec.
