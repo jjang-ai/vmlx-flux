@@ -329,6 +329,8 @@ struct VMLXFluxProbe {
                     "output_height": plan.outputHeight,
                     "vae_width": plan.vaeWidth,
                     "vae_height": plan.vaeHeight,
+                    "conditioning_width": plan.vlWidth,
+                    "conditioning_height": plan.vlHeight,
                     "patch_rows": conditioning.patchRows,
                     "patch_columns": conditioning.patchColumns,
                     "latents_shape": conditioning.latents.shape,
@@ -455,6 +457,8 @@ struct VMLXFluxProbe {
                         "output_height": plan.outputHeight,
                         "vae_width": plan.vaeWidth,
                         "vae_height": plan.vaeHeight,
+                        "conditioning_width": plan.vlWidth,
+                        "conditioning_height": plan.vlHeight,
                         "steps": plan.steps,
                         "guidance": plan.guidance,
                         "target_latent_count": result.targetLatentCount,
@@ -494,10 +498,10 @@ struct VMLXFluxProbe {
             guard let status = $0["status"] as? String else { return true }
             return status != "completed"
         }.count
-        let nativeStatus = runtimeStatus(for: local.canonicalName)
+        let nativeStatus = runtimeStatus(for: local)
         let loadStatus = payload["load_status"] as? String ?? "not_requested"
         let gateStatus: String
-        var gateReasons = runtimeBlockers(for: local.canonicalName)
+        var gateReasons = runtimeBlockers(for: local)
         if local.readiness != .loadableScaffold {
             gateReasons.append(contentsOf: local.blockedReasons)
         }
@@ -584,17 +588,19 @@ struct VMLXFluxProbe {
             "has_model_index": model.hasModelIndex,
             "readiness": model.readiness.rawValue,
             "blocked_reasons": model.blockedReasons,
-            "native_runtime_status": runtimeStatus(for: model.canonicalName),
-            "native_runtime_blockers": runtimeBlockers(for: model.canonicalName),
+            "native_runtime_status": runtimeStatus(for: model),
+            "native_runtime_blockers": runtimeBlockers(for: model),
         ]
     }
 
-    private static func runtimeStatus(for canonicalName: String?) -> String {
-        switch canonicalName {
+    private static func runtimeStatus(for model: LocalFluxModel) -> String {
+        switch model.canonicalName {
         case "z-image-turbo", "flux1-schnell", "qwen-image":
             return "native_pipeline_implemented"
         case "qwen-image-edit":
-            return "native_pipeline_partial"
+            return model.quantizationBits == 4 && model.readiness == .loadableScaffold
+                ? "native_pipeline_implemented"
+                : "native_pipeline_partial"
         case "flux1-dev", "flux1-kontext", "flux1-fill",
              "flux2-klein", "flux2-klein-edit",
              "fibo", "ideogram", "seedvr2":
@@ -608,18 +614,32 @@ struct VMLXFluxProbe {
         }
     }
 
-    private static func runtimeBlockers(for canonicalName: String?) -> [String] {
-        switch canonicalName {
+    private static func runtimeBlockers(for model: LocalFluxModel) -> [String] {
+        switch model.canonicalName {
         case "z-image-turbo", "flux1-schnell", "qwen-image":
             return [
                 "requires live same-seed prompt-sensitivity and multi-turn matrix before production promotion",
             ]
         case "qwen-image-edit":
+            if model.quantizationBits == 4 && model.readiness == .loadableScaffold {
+                return [
+                    "qwen-image-edit q4 text-image edit path is live-proven for same-seed prompt sensitivity and deterministic repeat on 2026-06-16",
+                    "mask/inpaint edit fields are not wired yet",
+                    "q3, q5, and q6 variants require separate live visual proof before UI promotion",
+                    "run a broader Osaurus-side production matrix before release promotion",
+                ]
+            }
+            if model.readiness != .loadableScaffold {
+                return [
+                    "local qwen-image-edit bundle is incomplete and cannot enter the native load path",
+                    "qwen-image-edit q4 is live-proven; this quant variant has not been generated and visually checked",
+                    "mask/inpaint edit fields are not wired yet",
+                ]
+            }
             return [
-                "ImageEditor loop completes and writes PNGs, but q4 live outputs do not yet follow edit prompts reliably",
-                "current apple-blue proof reconstructs/crops the red source apple instead of applying the requested blue edit; earlier rows were noise-like",
-                "prompt-image fidelity/edit quality root cause remains open",
-                "live coherent edited-image proof is missing",
+                "qwen-image-edit q4 is live-proven; this quant variant has not been generated and visually checked",
+                "mask/inpaint edit fields are not wired yet",
+                "live coherent edited-image proof is missing for this quant variant",
             ]
         case "flux1-dev", "flux1-kontext", "flux1-fill",
              "flux2-klein", "flux2-klein-edit", "fibo", "seedvr2":

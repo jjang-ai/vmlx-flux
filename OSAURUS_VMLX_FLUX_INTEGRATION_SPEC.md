@@ -31,12 +31,11 @@
 - **Per-model status:** `z-image-turbo` and `flux1-schnell` have fresh 4/8-bit
   live load + three-turn generate + SHA + visual proof from 2026-06-16.
   `qwen-image` 4-bit has fresh live load/generate/SHA + visual proof after the
-  mflux guidance-rescale fix. `qwen-image-edit` scans as local q3/q4/q5 variants
-  and q4 has manifest-gated load plus live prompt-token, Qwen2.5-VL prompt-image,
-  VAE conditioning, first transformer velocity, scheduler/decode, and PNG-write
-  proof, but viewed edit outputs do not yet follow edit prompts reliably. Treat
-  it as `PARTIAL`, not release-ready. See §6
-  and §7b.
+  mflux guidance-rescale fix. `qwen-image-edit` q4 has fresh live text-image
+  edit proof after the VL-grid source-conditioning fix: same prompt+seed repeats
+  byte-identically, a different edit prompt changes the image coherently, and
+  the q4 shape probes match mflux. q3/q5 are local but not visually proven, q6
+  is incomplete, and mask/inpaint editing is not wired. See §6 and §7b.
 
 ---
 
@@ -204,7 +203,7 @@ should present/request the exact local variant IDs:
 `Qwen-Image-Edit-mflux-q3`, `Qwen-Image-Edit-mflux-q4`,
 `Qwen-Image-Edit-mflux-q5`, and `Qwen-Image-Edit-mflux-q6`. Current disk state:
 `q3/q4/q5` are loadable local bundles, while `q6` is incomplete because it lacks
-transformer and VAE shards. The first edit implementation/proof target should be
+transformer and VAE shards. The current edit implementation/proof target is
 `Qwen-Image-Edit-mflux-q4`; current q4 load-only artifact:
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-manifest-load/Qwen-Image-Edit-mflux-q4-load.json`.
 Current q4 edit-preprocess artifact:
@@ -217,27 +216,24 @@ Current q4 VL encode artifact:
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-vl-encode-live/Qwen-Image-Edit-mflux-q4-load.json`
 (`feature_shape=196x3584`, `prompt_embeds_shape=1x212x3584`, finite stats).
 Current q4 VAE-conditioning artifact:
-`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-conditioning-live/Qwen-Image-Edit-mflux-q4-load.json`
-(`latents_shape=1x4096x64`, `image_ids_shape=1x4096x3`, finite stats).
-Current q4 first transformer velocity artifact:
-`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-denoise-live/Qwen-Image-Edit-mflux-q4-load.json`
-(`combined_velocity_shape=1x4352x64`, `target_velocity_shape=1x256x64`,
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-conditioning-after-cond-fix/Qwen-Image-Edit-mflux-q4-load.json`
+(`conditioning_width=384`, `conditioning_height=384`, `patch_rows=24`,
+`patch_columns=24`, `latents_shape=1x576x64`, `image_ids_shape=1x576x3`,
 finite stats).
-Current q4 status artifact:
-`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-partial-status-live/Qwen-Image-Edit-mflux-q4-load.json`
-(`load_status=loaded`, `native_runtime_status=native_pipeline_partial`, blockers
-record the edit-quality failure and missing coherent edited-image proof).
-Current q4 edit-loop artifacts:
-`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-edit-4step-guidance-live/Qwen-Image-Edit-mflux-q4-load.json`
-and
-`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-edit-512-4step-live/Qwen-Image-Edit-mflux-q4-load.json`
-(`edit_turns[0].status=completed`, PNGs written, but visually noise-like).
-Current Osaurus PR #64 apple-blue artifact:
-`docs/local/vmlx-flux-probes/2026-06-16-goal-qwen-edit-q4-apple-blue/Qwen-Image-Edit-mflux-q4-load.json`
-(`edit_turns[0].status=completed`, output SHA
-`5fc2b04436eb0a8ad0e7a61265f962ec0dc67027efa417804bc39c80ab37cb13`);
-viewed output is source-like but reconstructs/crops the red source apple instead
-of applying the requested blue edit or preserving the plate/table composition.
+Current q4 first transformer velocity artifact:
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-denoise-after-cond-fix/Qwen-Image-Edit-mflux-q4-load.json`
+(`target_latent_count=1024`, `conditioning_latent_count=576`,
+`combined_velocity_shape=1x1600x64`, `target_velocity_shape=1x1024x64`,
+`image_shapes=[[1,32,32],[1,24,24]]`, finite stats).
+Current q4 same-seed edit proof:
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-determinism-after-cond-fix/Qwen-Image-Edit-mflux-q4-load.json`
+(`load_status=loaded`; turn 1/3 blue-apple prompt SHA
+`005ab8baddfe9b7a94aa83f8ddd22d192e7e5a0275c556dcf2ead76a565e474a`; turn 2
+green-pear prompt SHA
+`815711be73a9e89599b3e97f9f15196115875103f9407d7b1b61bab33de8e3b4`).
+Viewed output is coherent and prompt-sensitive. Source trace: mflux passes
+`vl_width/vl_height` into edit conditioning and uses those dimensions for the
+source-image VAE encode when present; Swift now matches that path.
 
 **mflux component layout** (what the WeightLoader expects):
 ```
@@ -264,7 +260,7 @@ their 4-bit linears through scale tensors at load time inside the model.
 |---|---|---|---|
 | **z-image-turbo** | `native_pipeline_implemented` | Full native port: Qwen-style text encoder, patchify+caption-concat DiT (noise/context refiners + unified layers, RoPE, adaLN, timestep embed), real `AutoencoderKL` VAE decode, real 4/8-bit weight decode, PNG out. Fresh 2026-06-16 proof: 4-bit + 8-bit live load, 3 completed turns, same-prompt SHA match, different-prompt SHA change, viewed coherent apple/mountain images. | 1024px tuning. |
 | **qwen-image** | `native_pipeline_implemented` | Full native pipeline `QwenImageNative.swift`: Qwen2.5 LM text encoder (GQA), 60-layer MM-DiT (joint attention + 3-axis RoPE), 3D causal-conv VAE, mflux guidance-rescaled CFG. Fresh 2026-06-16 4-bit proof: live load, 20-step generation, same-prompt SHA match, different-prompt SHA change, viewed coherent apple/mountain outputs. | 8-bit/full not staged/proven. Two port bugs fixed: VAE conv weights are MLX channels-last (not PyTorch); qwen timestep is raw sigma (QwenTimesteps applies ×1000 internally). |
-| qwen-image-edit | `native_pipeline_partial` | Local q3/q4/q5 variants scan as loadable bundles after nested-quant scanner fix. `Qwen-Image-Edit-mflux-q4` passes manifest-gated engine load against tokenizer files, Qwen LM keys, Qwen-VL vision keys, transformer keys, and VAE encode/decode keys. Live q4 probes prove real tokenizer image-pad expansion (`input_ids_shape=1x276`, `image_token_count=196`, `template_drop_index=64`), Qwen2.5-VL prompt-image encode (`feature_shape=196x3584`, `prompt_embeds_shape=1x212x3584`, prompt tokens match features, finite stats), VAE static image latents (`latents_shape=1x4096x64`, `image_ids_shape=1x4096x3`, finite stats), first edit-shaped transformer velocity (`combined_velocity_shape=1x4352x64`, `target_velocity_shape=1x256x64`, finite stats), and ImageEditor scheduler/decode/PNG-write plumbing (`edit_turns[0].status=completed`). | Visual edit quality fails: earlier 256px/512px q4 PNGs were noise-like; the current apple-blue proof reconstructs/crops the red source apple instead of applying the requested blue edit. Root cause in prompt-image/edit fidelity remains open; coherent edited-image proof is missing. |
+| qwen-image-edit | `native_pipeline_implemented` for `Qwen-Image-Edit-mflux-q4`; `native_pipeline_partial` for unproven q3/q5 and incomplete q6 | Local q3/q4/q5 variants scan as loadable bundles after nested-quant scanner fix. `Qwen-Image-Edit-mflux-q4` passes manifest-gated engine load against tokenizer files, Qwen LM keys, Qwen-VL vision keys, transformer keys, and VAE encode/decode keys. Live q4 probes prove real tokenizer image-pad expansion (`input_ids_shape=1x276`, `image_token_count=196`, `template_drop_index=64`), Qwen2.5-VL prompt-image encode (`feature_shape=196x3584`, `prompt_embeds_shape=1x212x3584`, prompt tokens match features, finite stats), fixed VL-size VAE static image latents (`conditioning_width=384`, `conditioning_height=384`, `latents_shape=1x576x64`, `image_ids_shape=1x576x3`, finite stats), first edit-shaped transformer velocity (`combined_velocity_shape=1x1600x64`, `target_velocity_shape=1x1024x64`, finite stats), and ImageEditor scheduler/decode/PNG output. Same-seed proof: blue edit turn 1 and turn 3 share SHA `005ab8baddfe9b7a94aa83f8ddd22d192e7e5a0275c556dcf2ead76a565e474a`; green edit turn 2 SHA `815711be73a9e89599b3e97f9f15196115875103f9407d7b1b61bab33de8e3b4`; viewed outputs are coherent and prompt-sensitive. | q3/q5 need separate live visual proof before UI promotion; q6 is incomplete on disk; mask/inpaint edit fields are not wired; broader Osaurus production matrix still pending. |
 | flux2-klein / flux2-klein-edit | `not_implemented` | Bundle scans + loads; `FluxDiTConfig.flux2Klein` preset exists. | T5 (single-encoder) port + weight key-map + 3-axis RoPE. |
 | **flux1-schnell** | `native_pipeline_implemented` | Full native pipeline `Flux1Native.swift`: T5-XXL + CLIP-L encoders, full DiT (19 joint + 38 single blocks, 24h×128, 3-axis RoPE), AutoencoderKL VAE, mflux decode. Fresh 2026-06-16 proof: 4-bit + 8-bit live load, 3 completed turns, same-prompt SHA match, different-prompt SHA change, viewed coherent apple/mountain images. | tokenizer.json must be staged (mflux ships slow tokenizers — convert; see port plan). Full precision pending. |
 | flux1-dev/kontext/fill | `not_implemented` | dev = schnell + guidance embedder (small add); kontext/fill = edit variants. | wire guidance + edit conditioning on the working schnell pipeline. |
@@ -302,18 +298,18 @@ eval hot path).
 
 ---
 
-## 7b. Quant matrix (live-proven 2026-06-15) + model-resolution fix
+## 7b. Quant matrix (live-proven 2026-06-16) + model-resolution fix
 | Model | 4-bit | 8-bit | full |
 |---|---|---|---|
 | z-image-turbo | ✅ proven | ✅ proven | (not staged) |
 | flux1-schnell | ✅ proven | ✅ proven | (not staged) |
 | qwen-image | ✅ proven | (not staged) | (not staged) |
-| qwen-image-edit | PARTIAL q4 plumbing | (not staged) | (not staged) |
+| qwen-image-edit | ✅ q4 text-image edit proven; q3/q5 unproven; q6 incomplete | (not staged) | (not staged) |
 Proven rows are deterministic (same seed+prompt -> identical), prompt-sensitive,
 and coherent. z-image-turbo and flux1-schnell 8-bit and 4-bit produce visibly
-distinct images (genuine quant), ~3-4s/512px/4-step. qwen-image-edit is only a
-q4 plumbing row; current viewed output is source-like but edit-failing, and
-coherent edited-image proof is missing.
+distinct images (genuine quant), ~3-4s/512px/4-step. qwen-image-edit q4 is a
+live-proven text-image edit row after the VL-grid conditioning fix; q3/q5/q6 and
+masks remain unpromoted as above.
 
 **Model-resolution bug fixed:** `MLXStudioModelStore.resolve(name:)` normalized away the
 `-Nbit` suffix, so requesting `...-8bit` collapsed onto a co-installed `...-4bit` dir
@@ -382,9 +378,8 @@ vmlxflux-probe --root <dir> --model <name|dir> --generate --json \
 vmlxflux-probe --model Qwen-Image-Edit-mflux-q4 --edit \
   --source-image <png> --turn "make the background blue" \
   --artifacts <dir>
-# qwen-image-edit currently records completed edit turns and writes PNGs, but
-# viewed q4 outputs do not follow edit prompts reliably; coherent edit proof is
-# missing.
+# qwen-image-edit q4 records completed edit turns and writes PNGs; current proof
+# includes same-seed deterministic repeat plus prompt-sensitive viewed outputs.
 
 vmlxflux-probe --model Qwen-Image-Edit-mflux-q4 --qwen-edit-prompt \
   --source-image <png> --turn "make the background blue" \
@@ -395,8 +390,8 @@ vmlxflux-probe --model Qwen-Image-Edit-mflux-q4 --qwen-edit-prompt \
 vmlxflux-probe --model Qwen-Image-Edit-mflux-q4 --qwen-edit-conditioning \
   --source-image <png> \
   --artifacts <dir>
-# qwen-image-edit conditioning currently records live VAE encode + packed static
-# latents only.
+# qwen-image-edit conditioning records the mflux-compatible VL-size VAE encode
+# and packed static latents (square source: 384x384 -> 24x24 -> 576 tokens).
 
 vmlxflux-probe --model Qwen-Image-Edit-mflux-q4 --qwen-edit-vision \
   --source-image <png> --turn "make the background blue" \
@@ -408,8 +403,8 @@ vmlxflux-probe --model Qwen-Image-Edit-mflux-q4 --qwen-edit-denoise \
   --source-image <png> --width 256 --height 256 --steps 1 --seed 7 \
   --turn "make the background blue" \
   --artifacts <dir>
-# qwen-image-edit denoise currently records one live edit-shaped transformer
-# velocity forward and target velocity slice.
+# qwen-image-edit denoise records one live edit-shaped transformer velocity
+# forward and target velocity slice with target+conditioning image_shapes.
 ```
 Per-turn seed = `--seed` if given (fixes ALL turns to one seed — use for
 same-seed/different-prompt sensitivity tests), else `turnIndex+1`. Artifacts:
@@ -459,11 +454,10 @@ seeds, and the CFG path. z-image-turbo is **production-compatible** — the May-
    loader edits) back to `jjang-ai/vmlx-flux`.
 2. Prove z-image-turbo prompt-sensitivity live (§11); promote to production-compatible.
 3. Port the shared T5-XXL + CLIP-L encoders → unblocks Flux1/Flux2/Qwen at once.
-4. Qwen-Image-Edit quality: the q4 ImageEditor path now runs prompt-image
-   embeds, VAE conditioning latents, transformer denoise, scheduler, decode,
-   and PNG write, but viewed outputs do not follow edit prompts reliably.
-   Debug the edit-quality mismatch and capture coherent edited-image proof from
-   the q4 load target.
+4. Qwen-Image-Edit follow-through: q4 text-image edit is live-proven after the
+   VL-grid conditioning fix. Keep q3/q5 hidden/internal until separately
+   live-proven, keep q6 blocked until the local bundle is complete, and wire
+   masks/inpaint semantics before exposing masked editing.
 5. LoRA loader hook (`supportsLoRA`), img2img/controlnet conditioning.
 6. `numImages > 1` batching; webp/jpeg writers; preview-decode cadence.
 7. Wire MetalGate exclusion in the osaurus bridge (§7) before shipping.

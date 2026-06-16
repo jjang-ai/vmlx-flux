@@ -69,8 +69,8 @@ public struct QwenImageEditPreprocessPlan: Sendable {
         self.vlHeight = vl.height
         self.vaeWidth = vae.width
         self.vaeHeight = vae.height
-        self.conditioningPatchRows = vae.height / 16
-        self.conditioningPatchColumns = vae.width / 16
+        self.conditioningPatchRows = vl.height / 16
+        self.conditioningPatchColumns = vl.width / 16
         self.steps = steps
         self.guidance = guidance
     }
@@ -411,8 +411,8 @@ public enum QwenImageEditPreprocessor {
     ) throws -> QwenImageEditVAEInput {
         let tensor = try ImageIO.readRGBTensor(
             sourceImage,
-            width: plan.vaeWidth,
-            height: plan.vaeHeight,
+            width: plan.vlWidth,
+            height: plan.vlHeight,
             normalization: .minusOneToOne)
         return QwenImageEditVAEInput(tensor: tensor)
     }
@@ -557,8 +557,8 @@ public enum QwenImageEditConditioner {
         eval(encoded)
         return try QwenImageEditPreprocessor.conditioningLatents(
             encodedLatents: encoded,
-            height: plan.vaeHeight,
-            width: plan.vaeWidth)
+            height: plan.vlHeight,
+            width: plan.vlWidth)
     }
 }
 

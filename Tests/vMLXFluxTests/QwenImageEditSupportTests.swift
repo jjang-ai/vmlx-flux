@@ -22,8 +22,8 @@ final class QwenImageEditSupportTests: XCTestCase {
         XCTAssertEqual(plan.vlHeight, 320)
         XCTAssertEqual(plan.vaeWidth, 1248)
         XCTAssertEqual(plan.vaeHeight, 832)
-        XCTAssertEqual(plan.conditioningPatchRows, 52)
-        XCTAssertEqual(plan.conditioningPatchColumns, 78)
+        XCTAssertEqual(plan.conditioningPatchRows, 20)
+        XCTAssertEqual(plan.conditioningPatchColumns, 30)
     }
 
     func testPreprocessPlanFloorsExplicitOutputDimensionsToVAEGrid() throws {
@@ -256,11 +256,11 @@ final class QwenImageEditSupportTests: XCTestCase {
             sourceImage: source,
             plan: plan)
 
-        XCTAssertEqual(input.tensor.shape, [1, 3, 1024, 1024])
+        XCTAssertEqual(input.tensor.shape, [1, 3, 384, 384])
         let values = input.tensor.asArray(Float.self)
         XCTAssertEqual(values[0], 1.0, accuracy: 0.001)
-        XCTAssertEqual(values[1024 * 1024], (128.0 / 255.0) * 2.0 - 1.0, accuracy: 0.001)
-        XCTAssertEqual(values[1024 * 1024 * 2], -1.0, accuracy: 0.001)
+        XCTAssertEqual(values[384 * 384], (128.0 / 255.0) * 2.0 - 1.0, accuracy: 0.001)
+        XCTAssertEqual(values[384 * 384 * 2], -1.0, accuracy: 0.001)
     }
 
     func testConditioningLatentsPackEncodedVAELatentsWithImageIDs() throws {

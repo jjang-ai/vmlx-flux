@@ -9,13 +9,24 @@ reference template. For osaurus teammates + future porting sessions.
 with same-seed determinism, prompt sensitivity, and visual inspection. In the
 Osaurus monorepo worktree, `qwen-image-mflux-4bit` also has fresh load proof at
 `docs/local/vmlx-flux-probes/2026-06-16-osaurus-qwen-image-q4-load-final/qwen-image-mflux-4bit-load.json`.
-`qwen-image-edit` is still `PARTIAL`: q4 load, prompt-image token expansion,
-Qwen2.5-VL image encode, VAE conditioning, first edit transformer velocity, and
-ImageEditor scheduler/decode/PNG plumbing are live-proven, but the viewed edit
-outputs do not yet follow edit prompts reliably. Earlier rows were noise-like;
-the current apple-blue proof reconstructs/crops the red source apple instead of
-applying the requested blue edit. Do not expose it as a normal user model until
-coherent edited-image proof exists.
+`qwen-image-edit` q4 is live-proven for text-image edit after the VL-grid
+conditioning fix. Source trace: mflux passes `vl_width/vl_height` into
+`QwenEditUtil.create_image_conditioning_latents`, and that utility uses those
+dimensions for source-image VAE conditioning when present. Swift now mirrors
+that path in `QwenImageEditSupport.swift`: square source conditioning is
+384x384 -> 24x24 -> 576 static tokens, not 1024x1024 -> 64x64 -> 4096 tokens.
+Live proof:
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-determinism-after-cond-fix/Qwen-Image-Edit-mflux-q4-load.json`
+has a coherent same-prompt deterministic repeat (blue edit SHA
+`005ab8baddfe9b7a94aa83f8ddd22d192e7e5a0275c556dcf2ead76a565e474a` for turns
+1 and 3) and a different coherent green-pear edit (SHA
+`815711be73a9e89599b3e97f9f15196115875103f9407d7b1b61bab33de8e3b4`).
+Shape proof:
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-conditioning-after-cond-fix/Qwen-Image-Edit-mflux-q4-load.json`
+(`latents_shape=1x576x64`) and
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-denoise-after-cond-fix/Qwen-Image-Edit-mflux-q4-load.json`
+(`combined_velocity_shape=1x1600x64`). Do not expose q3/q5 until separately
+live-proven, q6 is incomplete on disk, and masks/inpaint are not wired yet.
 
 The sections below are the grounded port notes and transcription record. Older
 "next" checkboxes may describe the sequence that produced the current native
