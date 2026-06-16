@@ -19,16 +19,15 @@ contract osaurus implements server-side and the UI builds against.
 > keep q6 blocked until its local bundle is complete, and hide mask/inpaint
 > controls for qwen-edit. The mflux qwen-edit reference supports one or more
 > source images, but does not expose a qwen mask/inpaint path.
-> Ideogram has a complete local fp8 mirror bundle staged from
-> `cocktailpeanut/ideogram-4-fp8`, and the scanner reports it as loadable
-> scaffold. The shared source can now load Ideogram's
-> `unconditional_transformer` component and decode fp8 linear `weight_scale`
-> rows; direct load validates required sentinel keys from text encoder,
-> conditional transformer, unconditional transformer, and VAE. Keep it disabled
-> because the native `Ideogram4.generate` body still
-> throws `FluxError.notImplemented`, and no live generation proof exists.
+> Ideogram fp8 is no longer a `notImplemented` generate stub: the staged
+> `cocktailpeanut/ideogram-4-fp8` mirror now runs through Qwen3 text encoder,
+> conditional/unconditional 34-layer DiT, mflux fp8 `weight_scale` linears,
+> Flux2 VAE decode, and PNG output. Keep it gated as `PARTIAL`: live
+> 2026-06-16 typography proof rendered HELLO/BANANA, repeated HELLO with the
+> same seed byte-identically, and changed SHA for BANANA, but the 512px
+> object-scene probe produced an apple icon with extra hallucinated text.
 > Official `ideogram-ai/*` downloads still require approval for the current
-> account.
+> account, and nf4 is not staged/proven.
 > Current-main proof refresh: after PR #67, `vmlx-origin/main`
 > `9f1faea11aee78f17041c5bed6da039e70c11d05` was live-probed with
 > z-image 4/8, flux-schnell 4/8, qwen-image 4/6, and qwen-edit q4/q5.

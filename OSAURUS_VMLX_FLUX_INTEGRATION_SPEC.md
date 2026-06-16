@@ -38,14 +38,15 @@
   incomplete because its text-encoder index references missing
   `text_encoder/3.safetensors`, q6 is incomplete, and qwen masks are
   intentionally hidden because the mflux qwen-edit reference has no qwen
-  mask/inpaint argument or path. A complete
-  `cocktailpeanut/ideogram-4-fp8` mirror bundle is now staged locally and scans
-  as `loadableScaffold`. The shared loader now covers fp8 linear
-  `weight_scale` rows and the `unconditional_transformer` component, and direct
-  load validates sentinel keys from text encoder/transformers/VAE, but Ideogram
-  still has no native generation proof because `Ideogram4.generate` is not
-  implemented. Official `ideogram-ai/*` downloads are still approval-gated for
-  the current account. See §6 and §7b.
+  mask/inpaint argument or path. `ideogram-4-fp8` now has a native fp8 source
+  path through Qwen3 text encoder, conditional/unconditional 34-layer DiT,
+  Flux2 VAE decode, and PNG output. Live proof on 2026-06-16 shows readable
+  HELLO/BANANA typography, same-seed repeated HELLO byte identity, and
+  prompt-sensitive SHA changes. Keep Ideogram UI/API gated as `PARTIAL`: the
+  512px object-scene probe completed but produced an apple icon with extra
+  hallucinated text, official `ideogram-ai/*` downloads are still
+  approval-gated for the current account, and nf4 is incomplete. See §6 and
+  §7b.
 
 ---
 
@@ -193,7 +194,7 @@ strips `-4bit`/`-8bit`/`-3bit` suffix, collapses `flux.1`→`flux1`, `_`→`-`. 
 | `z-image-turbo` | Z-Image Turbo | imageGen | 4 / 0.0 |
 | `qwen-image` | Qwen-Image | imageGen | — |
 | `fibo` | FIBO | imageGen | — |
-| `ideogram` | Ideogram 4 | imageGen | 28 / 3.5 (fp8 weights: ideogram-ai/ideogram-4-fp8) |
+| `ideogram` | Ideogram 4 | imageGen | 20 / 7 (fp8 weights: ideogram-ai/ideogram-4-fp8) |
 | `flux1-kontext` | FLUX.1 Kontext | imageEdit (prompt-only) | — |
 | `flux1-fill` | FLUX.1 Fill | imageEdit (mask) | — |
 | `flux2-klein-edit` | FLUX.2 Klein Edit | imageEdit | — |
@@ -298,7 +299,7 @@ their 4-bit linears through scale tensors at load time inside the model.
 | flux2-klein / flux2-klein-edit | `not_implemented` | Bundle scans + loads; `FluxDiTConfig.flux2Klein` preset exists. | T5 (single-encoder) port + weight key-map + 3-axis RoPE. |
 | **flux1-schnell** | `native_pipeline_implemented` | Full native pipeline `Flux1Native.swift`: T5-XXL + CLIP-L encoders, full DiT (19 joint + 38 single blocks, 24h×128, 3-axis RoPE), AutoencoderKL VAE, mflux decode. Fresh 2026-06-16 proof: 4-bit + 8-bit live load, 3 completed turns, same-prompt SHA match, different-prompt SHA change, viewed coherent apple/mountain images. | tokenizer.json must be staged (mflux ships slow tokenizers — convert; see port plan). Full precision pending. |
 | flux1-dev/kontext/fill | `not_implemented` | dev = schnell + guidance embedder (small add); kontext/fill = edit variants. | wire guidance + edit conditioning on the working schnell pipeline. |
-| **ideogram** (Ideogram 4) | `not_implemented` (scaffold registered) | Strong text/typography renderer. mflux-compatible official weights: `ideogram-ai/ideogram-4-fp8` or `ideogram-ai/ideogram-4-nf4` (4-bit). Official HF metadata is reachable, but official downloads still require approval for the current account. A complete fp8 mirror bundle, `cocktailpeanut/ideogram-4-fp8`, is staged at `~/.mlxstudio/models/image/ideogram-4-fp8`; scan artifact `docs/local/vmlx-flux-probes/2026-06-16-ideogram-fp8-mirror-scan/scan.json` reports `readiness=loadableScaffold`, 4 safetensors, 27,526,985,054 bytes, and tokenizer/text_encoder/transformer/unconditional_transformer/vae present. Shared source now supports fp8 linear `weight_scale` rows, loads the `unconditional_transformer` shard group, and direct load validates sentinel keys from text encoder/transformers/VAE. Load artifact: `docs/local/vmlx-flux-probes/2026-06-16-ideogram-fp8-honest-load/ideogram-4-fp8-load.json` (`load_status=loaded`, `native_runtime_status=not_implemented`). | Native generation is still missing: `Ideogram4.generate` throws `FluxError.notImplemented`, so there is no live generation proof. Port Qwen3 text encoder (reuse Qwen LM pattern) + 34-layer DiT execution (emb 4608, 18 heads, llm_features 4096×13 multi-layer, rope 5e6) + unconditional transformer execution + VAE. Remaining quant work is nf4 if that bundle is used. |
+| **ideogram** (Ideogram 4) | `native_pipeline_partial` for staged fp8 mirror | Strong text/typography renderer. mflux-compatible official weights: `ideogram-ai/ideogram-4-fp8` or `ideogram-ai/ideogram-4-nf4` (4-bit). Official HF metadata is reachable, but official downloads still require approval for the current account. A complete fp8 mirror bundle, `cocktailpeanut/ideogram-4-fp8`, is staged at `~/.mlxstudio/models/image/ideogram-4-fp8`; scan artifact `docs/local/vmlx-flux-probes/2026-06-16-ideogram-fp8-mirror-scan/scan.json` reports `readiness=loadableScaffold`, 4 safetensors, 27,526,985,054 bytes, and tokenizer/text_encoder/transformer/unconditional_transformer/vae present. Native source now runs Qwen3 text encoder, conditional and unconditional 34-layer MM-DiT, fp8 `weight_scale` linears, mflux default 20-step guidance schedule, Flux2 VAE decode, and PNG output. Source fix: both Ideogram rotary helpers now match mflux `rotate_half` (`[-secondHalf, firstHalf]`). Current-source typography proof artifact: `docs/local/vmlx-flux-probes/2026-06-16-ideogram-fp8-native-gen20-current-source/ideogram-4-fp8-load.json` (`load_status=loaded`, three completed turns; HELLO turn 1 and 3 SHA `6534f016378a94add5ccc29397decf45c4dada6c1d82260bdd51517390cf4205`; BANANA turn SHA `b02464bd06e689ea6fc7aeb33dbc70bb1e1eb5b08c92668abc1832f61239f0b5`; viewed readable). | Keep UI/API gated beyond typography testing: current-source 512px object-scene artifact `docs/local/vmlx-flux-probes/2026-06-16-ideogram-fp8-native-gen20-object512-current-source/ideogram-4-fp8-load.json` completed but viewed output contains an apple icon plus extra hallucinated text (SHA `005ee15c584e37351672fb4ae40910348d05bf608705ee74c2aebe017682f072`). Need broader coherent object-scene proof, official bundle access if required, nf4 bundle completion/proof, and Osaurus-side production matrix. |
 | seedvr2 | scaffold | registered | upscale arch (different family). |
 | wan-2.1 / wan-2.2 | scaffold | full pipeline scaffolded (WanVAE3D + WanDiT + MP4 writer) with random weights. | real weight key-map, real Conv3d (currently a Conv2d shim), windowed attention for >3-4s clips. |
 
@@ -546,8 +547,10 @@ seeds, and the CFG path. z-image-turbo is **production-compatible** — the May-
    `/v1/images/generations`, `/v1/images/edits`, progress SSE, output path
    policy, exact directory-name resolution, and the required `MetalGate`
    exclusion around the full stream drain.
-2. Ideogram 4 native generation: Qwen3 encoder, 34-layer DiT,
-   unconditional transformer execution, VAE decode, then live image proof.
+2. Ideogram 4 follow-through: fp8 native generation is source-wired and
+   typography-proven on the staged mirror. Keep it gated until a broader
+   object-scene row is coherent without extra hallucinated text, official
+   access requirements are resolved, and nf4 is staged/proven if exposed.
 3. Qwen-Image-Edit follow-through: q4/q5 single-image and ordered multi-image
    text-image edit are live-proven after the VL-grid conditioning fix. Keep
    q3/q6 hidden/blocked until the local bundles are complete. Keep qwen mask

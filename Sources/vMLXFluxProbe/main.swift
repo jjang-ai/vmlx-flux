@@ -179,7 +179,7 @@ struct VMLXFluxProbe {
                         width: options.width,
                         height: options.height,
                         steps: options.steps,
-                        guidance: options.guidance ?? (loaded.canonicalName == "z-image-turbo" ? 0 : 3.5),
+                        guidance: options.guidance ?? defaultGuidance(for: loaded),
                         seed: options.seed ?? UInt64(index + 1),
                         outputDir: options.outputDirectory)
                     let turnStart = Date()
@@ -495,6 +495,17 @@ struct VMLXFluxProbe {
         return payload
     }
 
+    private static func defaultGuidance(for model: LocalFluxModel) -> Float {
+        switch model.canonicalName {
+        case "z-image-turbo":
+            return 0
+        case "ideogram":
+            return 7
+        default:
+            return 3.5
+        }
+    }
+
     private static func matrixRow(
         local: LocalFluxModel,
         payload: [String: Any]
@@ -610,9 +621,13 @@ struct VMLXFluxProbe {
                 && model.readiness == .loadableScaffold
                 ? "native_pipeline_implemented"
                 : "native_pipeline_partial"
+        case "ideogram":
+            return model.readiness == .loadableScaffold
+                ? "native_pipeline_partial"
+                : "not_implemented"
         case "flux1-dev", "flux1-kontext", "flux1-fill",
              "flux2-klein", "flux2-klein-edit",
-             "fibo", "ideogram", "seedvr2":
+             "fibo", "seedvr2":
             return "not_implemented"
         case "wan-2.1", "wan-2.2":
             return "video_scaffold_only"
@@ -674,11 +689,18 @@ struct VMLXFluxProbe {
                 "safetensors-to-module key mapping is missing",
             ]
         case "ideogram":
+            if model.readiness == .loadableScaffold {
+                return [
+                    "Ideogram fp8 source path is wired through Qwen3 text encoder, conditional/unconditional 34-layer DiT, VAE decode, and PNG output",
+                    "live 20-step fp8 typography probe completed after the rotary-half correction; HELLO/BANANA outputs were prompt-sensitive and repeated HELLO had identical SHA",
+                    "512px object-scene probe completed but produced an apple icon with extra hallucinated text, so broader coherent object-scene proof is still missing",
+                    "official ideogram-ai/ideogram-4-fp8 and ideogram-ai/ideogram-4-nf4 downloads still require approval for the current HF account; current live proof uses the staged cocktailpeanut/ideogram-4-fp8 mirror",
+                    "nf4 support remains incomplete until a complete local nf4 bundle is staged and load/generation proof passes",
+                ]
+            }
             return [
-                "Ideogram4.generate body throws FluxError.notImplemented",
-                "local ideogram-4-fp8 mirror bundle is staged, scans loadable, and passes load-time sentinel-key validation, but live generation is blocked until the native pipeline is implemented",
+                "local Ideogram bundle is incomplete and cannot enter the native load path",
                 "official ideogram-ai/ideogram-4-fp8 and ideogram-ai/ideogram-4-nf4 downloads still require approval for the current HF account",
-                "Qwen3 text encoder, 34-layer DiT execution, unconditional transformer execution, VAE, and nf4 support are missing; shared fp8 Linear weight_scale support is present",
             ]
         case "wan-2.1", "wan-2.2":
             return [

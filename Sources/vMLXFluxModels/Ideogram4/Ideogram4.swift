@@ -13,10 +13,9 @@ import vMLXFluxKit
 //
 // NOTE: ideogram-4 uses **fp8 quantization** (mflux fp8_linear) for the
 // transformer — a DIFFERENT quant path than the MLX group-quant (weight/
-// scales/biases) that flux/qwen/z-image use via MFluxStore. MFluxStore now has
-// fp8 `weight_scale` Linear support; STATUS: scaffold — generate throws
-// notImplemented until the Qwen3 encoder, DiT, unconditional transformer, and
-// VAE execution path are ported.
+// scales/biases) that flux/qwen/z-image use via MFluxStore. The fp8 path is
+// source-wired for the staged mirror bundle. Typography has current live proof;
+// broader UI/API promotion still requires coherent object-scene proof.
 
 public final class Ideogram4: ImageGenerator, @unchecked Sendable {
     public static let _register: Void = {
@@ -24,8 +23,8 @@ public final class Ideogram4: ImageGenerator, @unchecked Sendable {
             name: "ideogram",
             displayName: "Ideogram 4",
             kind: .imageGen,
-            defaultSteps: 28,
-            defaultGuidance: 3.5,
+            defaultSteps: 20,
+            defaultGuidance: 7,
             supportsLoRA: true,
             loader: { path, quant in
                 _ = Ideogram4._register
@@ -54,9 +53,38 @@ public final class Ideogram4: ImageGenerator, @unchecked Sendable {
 
     public func generate(_ request: ImageGenRequest) -> AsyncThrowingStream<ImageGenEvent, Error> {
         AsyncThrowingStream { continuation in
-            continuation.finish(throwing: FluxError.notImplemented(
-                "Ideogram4.generate — port from mflux/models/ideogram4 "
-                    + "(Qwen3 encoder + 34-layer fp8 DiT + unconditional transformer + VAE)."))
+            Task { [weak self] in
+                guard let self else { continuation.finish(); return }
+                do {
+                    guard request.steps > 0 else {
+                        throw FluxError.invalidRequest("Ideogram steps must be greater than zero")
+                    }
+                    let pipeline = try await Ideogram4Pipeline(
+                        modelPath: self.modelPath,
+                        loadedWeights: self.loadedWeights)
+                    let image = try pipeline.generate(
+                        prompt: request.prompt,
+                        width: request.width,
+                        height: request.height,
+                        steps: request.steps,
+                        guidance: request.guidance,
+                        seed: request.seed
+                    ) { step, total, eta in
+                        continuation.yield(.step(step: step, total: total, etaSeconds: eta))
+                    }
+                    let outURL = try await MainActor.run {
+                        try ImageIO.writePNG(image, outputDir: request.outputDir, prefix: "ideogram")
+                    }
+                    continuation.yield(.completed(url: outURL, seed: request.seed ?? 0))
+                    continuation.finish()
+                } catch {
+                    let message = String(describing: error)
+                    continuation.yield(.failed(
+                        message: message,
+                        hfAuth: message.contains("401") || message.contains("403")))
+                    continuation.finish()
+                }
+            }
         }
     }
 }
