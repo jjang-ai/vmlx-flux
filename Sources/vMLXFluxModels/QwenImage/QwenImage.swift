@@ -103,13 +103,24 @@ public final class QwenImageEdit: ImageEditor, @unchecked Sendable {
                 _ = try QwenImageEditPreprocessPlan.imageIDs(
                     height: plan.vaeHeight,
                     width: plan.vaeWidth)
+                let visionInput = try QwenImageEditPreprocessor.visionInput(
+                    sourceImage: request.sourceImage,
+                    plan: plan)
+                let vaeInput = try QwenImageEditPreprocessor.vaeInput(
+                    sourceImage: request.sourceImage,
+                    plan: plan)
+                let visionGrid = visionInput.imageGridTHW.map(String.init).joined(separator: "x")
+                let vaeShape = vaeInput.tensor.shape.map(String.init).joined(separator: "x")
                 continuation.finish(throwing: FluxError.notImplemented(
                     "QwenImageEdit.edit — Qwen2.5-VL vision encoder, VAE image encode, "
                     + "conditioning latent concat, and denoise loop are still missing; "
                     + "preprocess output=\(plan.outputWidth)x\(plan.outputHeight) "
                     + "vl=\(plan.vlWidth)x\(plan.vlHeight) "
                     + "vae=\(plan.vaeWidth)x\(plan.vaeHeight) "
-                    + "conditioning=\(plan.conditioningPatchRows)x\(plan.conditioningPatchColumns)"))
+                    + "conditioning=\(plan.conditioningPatchRows)x\(plan.conditioningPatchColumns) "
+                    + "vision_patches=\(visionInput.pixelValues.dim(0))x\(visionInput.pixelValues.dim(1)) "
+                    + "vision_grid=\(visionGrid) "
+                    + "vae_input=\(vaeShape)"))
             } catch {
                 continuation.finish(throwing: error)
             }

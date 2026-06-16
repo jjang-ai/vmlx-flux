@@ -1,6 +1,7 @@
 import XCTest
 import CoreGraphics
 import ImageIO
+@preconcurrency import MLX
 @testable import vMLXFluxKit
 @testable import vMLXFluxModels
 
@@ -82,6 +83,55 @@ final class QwenImageEditSupportTests: XCTestCase {
         XCTAssertEqual(plan.vlHeight, 320)
     }
 
+    func testVisionInputMatchesQwenVLProcessorShapeAndNormalization() throws {
+        let source = try makePNG(width: 512, height: 512, rgba: (255, 128, 0, 255))
+        let plan = try QwenImageEditPreprocessPlan(
+            sourceImage: source,
+            requestedWidth: nil,
+            requestedHeight: nil,
+            steps: 20,
+            guidance: 4.0)
+
+        let input = try QwenImageEditPreprocessor.visionInput(
+            sourceImage: source,
+            plan: plan)
+
+        XCTAssertEqual(input.resizedWidth, 392)
+        XCTAssertEqual(input.resizedHeight, 392)
+        XCTAssertEqual(input.imageGridTHW, [1, 28, 28])
+        XCTAssertEqual(input.imageTokenCount, 196)
+        XCTAssertEqual(input.pixelValues.shape, [784, 1176])
+
+        let values = input.pixelValues.asArray(Float.self)
+        XCTAssertEqual(values.count, 784 * 1176)
+        let red = Float((1.0 - 0.48145466) / 0.26862954)
+        let green = Float(((128.0 / 255.0) - 0.4578275) / 0.26130258)
+        let blue = Float((0.0 - 0.40821073) / 0.27577711)
+        XCTAssertEqual(values[0], red, accuracy: 0.001)
+        XCTAssertEqual(values[14 * 14 * 2], green, accuracy: 0.001)
+        XCTAssertEqual(values[14 * 14 * 4], blue, accuracy: 0.001)
+    }
+
+    func testVAEInputUsesMinusOneToOneNCHWAtConditioningSize() throws {
+        let source = try makePNG(width: 512, height: 512, rgba: (255, 128, 0, 255))
+        let plan = try QwenImageEditPreprocessPlan(
+            sourceImage: source,
+            requestedWidth: nil,
+            requestedHeight: nil,
+            steps: 20,
+            guidance: 4.0)
+
+        let input = try QwenImageEditPreprocessor.vaeInput(
+            sourceImage: source,
+            plan: plan)
+
+        XCTAssertEqual(input.tensor.shape, [1, 3, 1024, 1024])
+        let values = input.tensor.asArray(Float.self)
+        XCTAssertEqual(values[0], 1.0, accuracy: 0.001)
+        XCTAssertEqual(values[1024 * 1024], (128.0 / 255.0) * 2.0 - 1.0, accuracy: 0.001)
+        XCTAssertEqual(values[1024 * 1024 * 2], -1.0, accuracy: 0.001)
+    }
+
     func testQwenImageEditReadsSourceImageBeforeNotImplementedBoundary() async throws {
         let model = try makeTemporaryQwenImageEditBundle()
         let source = try makePNG(width: 1536, height: 1024)
@@ -109,19 +159,31 @@ final class QwenImageEditSupportTests: XCTestCase {
             XCTAssertTrue(message.contains("vl=480x320"))
             XCTAssertTrue(message.contains("vae=1248x832"))
             XCTAssertTrue(message.contains("conditioning=52x78"))
+            XCTAssertTrue(message.contains("vision_patches="))
+            XCTAssertTrue(message.contains("vae_input="))
         } catch {
             XCTFail("wrong error: \(error)")
         }
     }
 
-    private func makePNG(width: Int, height: Int) throws -> URL {
+    private func makePNG(
+        width: Int,
+        height: Int,
+        rgba: (UInt8, UInt8, UInt8, UInt8) = (255, 255, 255, 255)
+    ) throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("qwen-edit-source-\(UUID().uuidString).png")
         addTeardownBlock {
             try? FileManager.default.removeItem(at: url)
         }
         let bytesPerRow = width * 4
-        let pixels = [UInt8](repeating: 255, count: height * bytesPerRow)
+        var pixels = [UInt8](repeating: 0, count: height * bytesPerRow)
+        for offset in stride(from: 0, to: pixels.count, by: 4) {
+            pixels[offset] = rgba.0
+            pixels[offset + 1] = rgba.1
+            pixels[offset + 2] = rgba.2
+            pixels[offset + 3] = rgba.3
+        }
         guard let provider = CGDataProvider(data: Data(pixels) as CFData),
               let image = CGImage(
                 width: width,

@@ -140,8 +140,11 @@ for try await event in engine.generate(request) {
 - `qwen-image-edit` q4: local scan + manifest-gated engine load passed against
   the staged nested bundle. A live edit request with a real source PNG now
   reaches the mflux-compatible preprocess contract (`output`, VL image size, VAE
-  conditioning size, conditioning patch grid) before stopping at the typed
-  `FluxError.notImplemented` body. This is still `PARTIAL`; no edited image is
+  conditioning size, conditioning patch grid, Qwen-VL normalized patch tensor,
+  and VAE image-input tensor) before stopping at the typed
+  `FluxError.notImplemented` body. Current live artifact records
+  `vision_patches=784x1176`, `vision_grid=1x28x28`, and
+  `vae_input=1x3x1024x1024`. This is still `PARTIAL`; no edited image is
   generated yet.
 
 `vmlxflux-probe` is the scan/load/generate verification CLI. Run live probes from

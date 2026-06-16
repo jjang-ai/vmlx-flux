@@ -35,23 +35,26 @@
   with `load_status=loaded`, `canonical=qwen-image-edit`, `kind=imageEdit`,
   `quant=4`, and `generate_requested=false`.
 - **Qwen-Image-Edit preprocess boundary:** added the mflux-compatible edit
-  preprocess plan: source-image dimensions, output dimensions, VL conditioning
-  image dimensions, VAE conditioning dimensions, and Qwen image IDs. Added probe
+  preprocess path: source-image dimensions, output dimensions, VL conditioning
+  image dimensions, VAE conditioning dimensions, Qwen image IDs, Qwen-VL
+  normalized patch tensor, and VAE image-input tensor. Added probe
   `--edit --source-image`; live q4 run loaded the real staged bundle and sent a
   real source PNG through `QwenImageEdit.edit` before the typed missing-body
   error. Artifact:
   `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-preprocess-live/Qwen-Image-Edit-mflux-q4-load.json`
   with `edit_requested=true`, turn status `threw`, and error text containing
-  `preprocess output=1024x1024 vl=384x384 vae=1024x1024 conditioning=64x64`.
+  `preprocess output=1024x1024 vl=384x384 vae=1024x1024 conditioning=64x64
+  vision_patches=784x1176 vision_grid=1x28x28 vae_input=1x3x1024x1024`.
 - **Qwen-Edit guardrail tests:** red test first caught the previous fake load
   (`QwenImageEdit` accepted a bundle missing vision tower keys). After the
   validator landed,
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter vMLXFluxTests.RegistryTests/testQwenImageEdit`
   passed 3 tests. The new
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter vMLXFluxTests.QwenImageEditSupportTests`
-  preprocess/edit-boundary suite passed 6 tests; full
-  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` passed
-  29 tests.
+  preprocess/edit-boundary suite now passes 8 tests, including Qwen-VL patch
+  shape/normalization and VAE input tensor shape/range. Full
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` passes
+  31 tests.
 - **Probe metadata fixed:** scan JSON now reports `native_pipeline_implemented`
   for `z-image-turbo`, `flux1-schnell`, and `qwen-image`; `qwen-image-edit`
   remains `not_implemented` with blockers for the missing Qwen2.5-VL vision
@@ -373,27 +376,28 @@ VAE machinery is shared via `vMLXFluxKit`).
 
 ---
 
-## 📋 Audit checks (passed at session close)
+## 📋 Audit checks
 
 | Check | Status | Details |
 |---|---|---|
-| `swift build` clean | ✅ | 0 errors, warnings only from MLXArray non-Sendable (known) |
-| `swift test` all pass | ✅ | 16/16 (8 RegistryTests + 8 ShapeTests) |
+| `swift build --product vmlxflux-probe` | ✅ | 0 errors; current warnings are unhandled-resource warnings from sibling `../vmlx-swift-lm` docs/templates |
+| `swift test` all pass | ✅ | 31/31; standalone checkout tests need `default.metallib` available at package root or the vmlx-swift workspace Metal library |
 | vmlx-flux ↔ vmlx-swift-lm dep resolves | ✅ | sibling path `../vmlx-swift-lm` works |
 | vmlx-flux ↔ mlx-swift dep resolves | ✅ | `osaurus-ai/mlx-swift @ osaurus-0.31.3` |
 | Module naming convention | ✅ | all lowercase-v: `vMLXFlux*` matches vMLX side |
 | No stale `VMLXFlux*` references in source | ✅ | `grep -rln "import VMLXFlux"` returns empty |
-| `ARCHITECTURE.md` current | ✅ | 300+ lines, covers bridge location + flow |
 | `PROGRESS.md` current | ✅ | this file |
 | `README.md` | ✅ | usage example, architecture diagram, status notes |
 | `.gitignore` excludes build artifacts | ✅ | `.build/`, `.swiftpm/`, `Package.resolved` |
-| All commits pushed to origin/main | ✅ | last = `fdc1f68` |
-| Weight key-map docblock on FluxDiTModel | ✅ | 40 lines, every BFL key mapped |
-| Known deferred items documented | ✅ | marked TODO in code + listed in ARCHITECTURE.md §"Known deferred items" |
+| Branch push target | ✅ | `origin/native-zimage-proven`; recent proof commits are tracked in `MFLUX_HANDOFF.md` §10 |
+| Known deferred items documented | ✅ | missing model bodies and proof gaps are listed in this file and `MFLUX_HANDOFF.md` |
 
 ---
 
-## 🗂 Session history (commits)
+## 🗂 Historic scaffold commits
+
+This older scaffold history is preserved for archaeology. For the current
+native proof branch, use `MFLUX_HANDOFF.md` §10 and `git log`.
 
 | Commit | Summary |
 |---|---|
