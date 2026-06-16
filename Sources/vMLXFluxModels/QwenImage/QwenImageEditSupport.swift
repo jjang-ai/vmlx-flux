@@ -24,6 +24,24 @@ public struct QwenImageEditPreprocessPlan: Sendable {
         steps: Int,
         guidance: Float
     ) throws {
+        try self.init(
+            sourceImages: [sourceImage],
+            requestedWidth: requestedWidth,
+            requestedHeight: requestedHeight,
+            steps: steps,
+            guidance: guidance)
+    }
+
+    public init(
+        sourceImages: [URL],
+        requestedWidth: Int?,
+        requestedHeight: Int?,
+        steps: Int,
+        guidance: Float
+    ) throws {
+        guard let sourceImage = sourceImages.last else {
+            throw FluxError.invalidRequest("Qwen edit requires at least one source image")
+        }
         let dimensions = try ImageIO.dimensions(of: sourceImage)
         try self.init(
             sourceWidth: dimensions.width,
@@ -136,21 +154,28 @@ public struct QwenImageEditPromptTokens {
 
 public struct QwenImageEditVisionFeatures {
     public let imageFeatures: MLXArray
-    public let imageGridTHW: [Int]
+    public let imageGridTHWs: [[Int]]
 
     public var imageTokenCount: Int { imageFeatures.dim(0) }
     public var hiddenSize: Int { imageFeatures.dim(1) }
+    public var imageGridTHW: [Int] { imageGridTHWs.first ?? [] }
 
     public init(imageFeatures: MLXArray, imageGridTHW: [Int]) {
+        self.init(imageFeatures: imageFeatures, imageGridTHWs: [imageGridTHW])
+    }
+
+    public init(imageFeatures: MLXArray, imageGridTHWs: [[Int]]) {
         self.imageFeatures = imageFeatures
-        self.imageGridTHW = imageGridTHW
+        self.imageGridTHWs = imageGridTHWs
     }
 
     public func validateMatches(promptImageTokenCount: Int) throws {
-        guard imageGridTHW.count == 3 else {
-            throw FluxError.invalidRequest("Qwen edit vision grid must be [t,h,w]")
+        let expected = try imageGridTHWs.reduce(0) { total, grid in
+            guard grid.count == 3 else {
+                throw FluxError.invalidRequest("Qwen edit vision grid must be [t,h,w]")
+            }
+            return total + (try QwenImageEditVisionTransformer.mergedTokenCount(imageGridTHW: grid))
         }
-        let expected = try QwenImageEditVisionTransformer.mergedTokenCount(imageGridTHW: imageGridTHW)
         guard imageTokenCount == expected else {
             throw FluxError.invalidRequest(
                 "Qwen edit vision feature count \(imageTokenCount) does not match grid-derived count \(expected)")
@@ -163,6 +188,26 @@ public struct QwenImageEditVisionFeatures {
             throw FluxError.invalidRequest(
                 "Qwen edit vision hidden size \(hiddenSize) does not match Qwen text hidden size \(QwenTextEncoder.hidden)")
         }
+    }
+
+    public func validateMatches(promptImageTokenCounts: [Int]) throws {
+        guard promptImageTokenCounts.count == imageGridTHWs.count else {
+            throw FluxError.invalidRequest(
+                "Qwen edit prompt image count \(promptImageTokenCounts.count) does not match vision image count \(imageGridTHWs.count)")
+        }
+        var expectedTotal = 0
+        for (index, grid) in imageGridTHWs.enumerated() {
+            guard grid.count == 3 else {
+                throw FluxError.invalidRequest("Qwen edit vision grid must be [t,h,w]")
+            }
+            let expected = try QwenImageEditVisionTransformer.mergedTokenCount(imageGridTHW: grid)
+            guard promptImageTokenCounts[index] == expected else {
+                throw FluxError.invalidRequest(
+                    "Qwen edit image \(index + 1) prompt token count \(promptImageTokenCounts[index]) does not match vision grid count \(expected)")
+            }
+            expectedTotal += expected
+        }
+        try validateMatches(promptImageTokenCount: expectedTotal)
     }
 }
 
@@ -217,6 +262,21 @@ public struct QwenImageEditConditioningLatents {
     public let imageIDs: MLXArray
     public let patchRows: Int
     public let patchColumns: Int
+    public let imageCount: Int
+
+    public init(
+        latents: MLXArray,
+        imageIDs: MLXArray,
+        patchRows: Int,
+        patchColumns: Int,
+        imageCount: Int = 1
+    ) {
+        self.latents = latents
+        self.imageIDs = imageIDs
+        self.patchRows = patchRows
+        self.patchColumns = patchColumns
+        self.imageCount = imageCount
+    }
 }
 
 public struct QwenImageEditImageShape {
@@ -272,10 +332,11 @@ public struct QwenImageEditTransformerInputs {
         else {
             throw FluxError.invalidRequest("Qwen edit conditioning latents must have shape 1xNx64")
         }
-        guard conditioning.patchRows > 0, conditioning.patchColumns > 0 else {
+        guard conditioning.patchRows > 0, conditioning.patchColumns > 0, conditioning.imageCount > 0 else {
             throw FluxError.invalidRequest("Qwen edit conditioning patch grid must be positive")
         }
-        guard conditioning.latents.dim(1) == conditioning.patchRows * conditioning.patchColumns else {
+        let conditioningPerImage = conditioning.patchRows * conditioning.patchColumns
+        guard conditioning.latents.dim(1) == conditioningPerImage * conditioning.imageCount else {
             throw FluxError.invalidRequest("Qwen edit conditioning latent count does not match patch grid")
         }
         guard conditioning.imageIDs.shape == [1, conditioning.latents.dim(1), 3] else {
@@ -293,10 +354,13 @@ public struct QwenImageEditTransformerInputs {
         self.hiddenStates = concatenated([targetLatents, conditioning.latents], axis: 1)
         self.targetLatentCount = targetCount
         self.conditioningLatentCount = conditioning.latents.dim(1)
-        self.imageShapes = [
-            QwenImageEditImageShape(frame: 1, height: targetPatchRows, width: targetPatchColumns),
-            QwenImageEditImageShape(frame: 1, height: conditioning.patchRows, width: conditioning.patchColumns),
-        ]
+        self.imageShapes = [QwenImageEditImageShape(frame: 1, height: targetPatchRows, width: targetPatchColumns)]
+            + Array(
+                repeating: QwenImageEditImageShape(
+                    frame: 1,
+                    height: conditioning.patchRows,
+                    width: conditioning.patchColumns),
+                count: conditioning.imageCount)
     }
 }
 
@@ -542,8 +606,16 @@ public enum QwenImageEditConditioner {
         sourceImage: URL,
         plan: QwenImageEditPreprocessPlan
     ) throws -> QwenImageEditConditioningLatents {
+        try encode(modelPath: modelPath, sourceImages: [sourceImage], plan: plan)
+    }
+
+    public static func encode(
+        modelPath: URL,
+        sourceImages: [URL],
+        plan: QwenImageEditPreprocessPlan
+    ) throws -> QwenImageEditConditioningLatents {
         let store = MFluxStore(try WeightLoader.load(from: modelPath))
-        return try encode(store: store, sourceImage: sourceImage, plan: plan)
+        return try encode(store: store, sourceImages: sourceImages, plan: plan)
     }
 
     static func encode(
@@ -551,14 +623,39 @@ public enum QwenImageEditConditioner {
         sourceImage: URL,
         plan: QwenImageEditPreprocessPlan
     ) throws -> QwenImageEditConditioningLatents {
+        try encode(store: store, sourceImages: [sourceImage], plan: plan)
+    }
+
+    static func encode(
+        store: MFluxStore,
+        sourceImages: [URL],
+        plan: QwenImageEditPreprocessPlan
+    ) throws -> QwenImageEditConditioningLatents {
+        guard !sourceImages.isEmpty else {
+            throw FluxError.invalidRequest("Qwen edit conditioning requires at least one source image")
+        }
         let encoder = try Qwen3DVAEEncoder(store: store)
-        let vaeInput = try QwenImageEditPreprocessor.vaeInput(sourceImage: sourceImage, plan: plan)
-        let encoded = encoder.encode(vaeInput.tensor)
-        eval(encoded)
-        return try QwenImageEditPreprocessor.conditioningLatents(
-            encodedLatents: encoded,
-            height: plan.vlHeight,
-            width: plan.vlWidth)
+        var latentParts: [MLXArray] = []
+        var idParts: [MLXArray] = []
+        latentParts.reserveCapacity(sourceImages.count)
+        idParts.reserveCapacity(sourceImages.count)
+        for sourceImage in sourceImages {
+            let vaeInput = try QwenImageEditPreprocessor.vaeInput(sourceImage: sourceImage, plan: plan)
+            let encoded = encoder.encode(vaeInput.tensor)
+            eval(encoded)
+            let conditioning = try QwenImageEditPreprocessor.conditioningLatents(
+                encodedLatents: encoded,
+                height: plan.vlHeight,
+                width: plan.vlWidth)
+            latentParts.append(conditioning.latents)
+            idParts.append(conditioning.imageIDs)
+        }
+        return QwenImageEditConditioningLatents(
+            latents: concatenated(latentParts, axis: 1),
+            imageIDs: concatenated(idParts, axis: 1),
+            patchRows: plan.conditioningPatchRows,
+            patchColumns: plan.conditioningPatchColumns,
+            imageCount: sourceImages.count)
     }
 }
 
@@ -568,15 +665,37 @@ public enum QwenImageEditVisionFeatureEncoder {
         sourceImage: URL,
         plan: QwenImageEditPreprocessPlan
     ) throws -> QwenImageEditVisionFeatures {
+        try encode(modelPath: modelPath, sourceImages: [sourceImage], plan: plan)
+    }
+
+    public static func encode(
+        modelPath: URL,
+        sourceImages: [URL],
+        plan: QwenImageEditPreprocessPlan
+    ) throws -> QwenImageEditVisionFeatures {
         let store = MFluxStore(try WeightLoader.load(from: modelPath))
         let vision = try QwenImageEditVisionTransformer(store: store)
-        let input = try QwenImageEditPreprocessor.visionInput(sourceImage: sourceImage, plan: plan)
-        let features = vision(pixelValues: input.pixelValues, imageGridTHW: input.imageGridTHW)
-        eval(features)
+        guard !sourceImages.isEmpty else {
+            throw FluxError.invalidRequest("Qwen edit vision encode requires at least one source image")
+        }
+        var featureParts: [MLXArray] = []
+        var grids: [[Int]] = []
+        var tokenCounts: [Int] = []
+        featureParts.reserveCapacity(sourceImages.count)
+        grids.reserveCapacity(sourceImages.count)
+        tokenCounts.reserveCapacity(sourceImages.count)
+        for sourceImage in sourceImages {
+            let input = try QwenImageEditPreprocessor.visionInput(sourceImage: sourceImage, plan: plan)
+            let features = vision(pixelValues: input.pixelValues, imageGridTHW: input.imageGridTHW)
+            eval(features)
+            featureParts.append(features)
+            grids.append(input.imageGridTHW)
+            tokenCounts.append(input.imageTokenCount)
+        }
         let result = QwenImageEditVisionFeatures(
-            imageFeatures: features,
-            imageGridTHW: input.imageGridTHW)
-        try result.validateMatches(promptImageTokenCount: input.imageTokenCount)
+            imageFeatures: concatenated(featureParts, axis: 0),
+            imageGridTHWs: grids)
+        try result.validateMatches(promptImageTokenCounts: tokenCounts)
         return result
     }
 }
@@ -594,11 +713,24 @@ public enum QwenImageEditPromptImageEncoder {
         prompt: String,
         plan: QwenImageEditPreprocessPlan
     ) async throws -> QwenImageEditVisionLanguageEncoding {
+        try await encode(
+            modelPath: modelPath,
+            sourceImages: [sourceImage],
+            prompt: prompt,
+            plan: plan)
+    }
+
+    public static func encode(
+        modelPath: URL,
+        sourceImages: [URL],
+        prompt: String,
+        plan: QwenImageEditPreprocessPlan
+    ) async throws -> QwenImageEditVisionLanguageEncoding {
         let store = MFluxStore(try WeightLoader.load(from: modelPath))
         return try await encode(
             store: store,
             modelPath: modelPath,
-            sourceImage: sourceImage,
+            sourceImages: sourceImages,
             prompt: prompt,
             plan: plan)
     }
@@ -610,22 +742,51 @@ public enum QwenImageEditPromptImageEncoder {
         prompt: String,
         plan: QwenImageEditPreprocessPlan
     ) async throws -> QwenImageEditVisionLanguageEncoding {
+        try await encode(
+            store: store,
+            modelPath: modelPath,
+            sourceImages: [sourceImage],
+            prompt: prompt,
+            plan: plan)
+    }
+
+    static func encode(
+        store: MFluxStore,
+        modelPath: URL,
+        sourceImages: [URL],
+        prompt: String,
+        plan: QwenImageEditPreprocessPlan
+    ) async throws -> QwenImageEditVisionLanguageEncoding {
+        guard !sourceImages.isEmpty else {
+            throw FluxError.invalidRequest("Qwen edit prompt-image encode requires at least one source image")
+        }
         let vision = try QwenImageEditVisionTransformer(store: store)
         let text = try QwenTextEncoder(store: store, dropIdx: QwenImageEditPreprocessor.editTemplateStartIndex)
         let tokenizer = try await QwenImageEditPromptTokenizer(modelPath: modelPath)
-        let visionInput = try QwenImageEditPreprocessor.visionInput(sourceImage: sourceImage, plan: plan)
-        let imageFeatures = vision(
-            pixelValues: visionInput.pixelValues,
-            imageGridTHW: visionInput.imageGridTHW)
-        eval(imageFeatures)
+        var featureParts: [MLXArray] = []
+        var grids: [[Int]] = []
+        var imageTokenCounts: [Int] = []
+        featureParts.reserveCapacity(sourceImages.count)
+        grids.reserveCapacity(sourceImages.count)
+        imageTokenCounts.reserveCapacity(sourceImages.count)
+        for sourceImage in sourceImages {
+            let visionInput = try QwenImageEditPreprocessor.visionInput(sourceImage: sourceImage, plan: plan)
+            let imageFeatures = vision(
+                pixelValues: visionInput.pixelValues,
+                imageGridTHW: visionInput.imageGridTHW)
+            eval(imageFeatures)
+            featureParts.append(imageFeatures)
+            grids.append(visionInput.imageGridTHW)
+            imageTokenCounts.append(visionInput.imageTokenCount)
+        }
         let features = QwenImageEditVisionFeatures(
-            imageFeatures: imageFeatures,
-            imageGridTHW: visionInput.imageGridTHW)
-        try features.validateMatches(promptImageTokenCount: visionInput.imageTokenCount)
+            imageFeatures: concatenated(featureParts, axis: 0),
+            imageGridTHWs: grids)
+        try features.validateMatches(promptImageTokenCounts: imageTokenCounts)
 
         let promptInput = try QwenImageEditPreprocessor.visionLanguagePrompt(
             prompt: prompt,
-            imageTokenCounts: [features.imageTokenCount])
+            imageTokenCounts: imageTokenCounts)
         let tokens = tokenizer.tokenize(promptInput)
         try features.validateMatches(promptImageTokenCount: tokens.imageTokenCount)
         let promptEmbeddings = try text.encodeVisionLanguage(
@@ -649,16 +810,31 @@ public enum QwenImageEditDenoiseProbe {
         plan: QwenImageEditPreprocessPlan,
         seed: UInt64?
     ) async throws -> QwenImageEditDenoiseResult {
+        try await predictVelocity(
+            modelPath: modelPath,
+            sourceImages: [sourceImage],
+            prompt: prompt,
+            plan: plan,
+            seed: seed)
+    }
+
+    public static func predictVelocity(
+        modelPath: URL,
+        sourceImages: [URL],
+        prompt: String,
+        plan: QwenImageEditPreprocessPlan,
+        seed: UInt64?
+    ) async throws -> QwenImageEditDenoiseResult {
         let store = MFluxStore(try WeightLoader.load(from: modelPath))
         let promptEncoding = try await QwenImageEditPromptImageEncoder.encode(
             store: store,
             modelPath: modelPath,
-            sourceImage: sourceImage,
+            sourceImages: sourceImages,
             prompt: prompt,
             plan: plan)
         let conditioning = try QwenImageEditConditioner.encode(
             store: store,
-            sourceImage: sourceImage,
+            sourceImages: sourceImages,
             plan: plan)
 
         let targetRows = plan.outputHeight / 16
@@ -712,8 +888,29 @@ final class QwenImageEditPipeline {
         seed: UInt64?,
         progress: (Int, Int, Double?) -> Void
     ) async throws -> MLXArray {
+        try await edit(
+            prompt: prompt,
+            sourceImages: [sourceImage],
+            width: width,
+            height: height,
+            steps: steps,
+            guidance: guidance,
+            seed: seed,
+            progress: progress)
+    }
+
+    func edit(
+        prompt: String,
+        sourceImages: [URL],
+        width: Int?,
+        height: Int?,
+        steps: Int,
+        guidance: Float,
+        seed: UInt64?,
+        progress: (Int, Int, Double?) -> Void
+    ) async throws -> MLXArray {
         let plan = try QwenImageEditPreprocessPlan(
-            sourceImage: sourceImage,
+            sourceImages: sourceImages,
             requestedWidth: width,
             requestedHeight: height,
             steps: steps,
@@ -721,18 +918,18 @@ final class QwenImageEditPipeline {
         let positive = try await QwenImageEditPromptImageEncoder.encode(
             store: store,
             modelPath: modelPath,
-            sourceImage: sourceImage,
+            sourceImages: sourceImages,
             prompt: prompt,
             plan: plan)
         let negative = try await QwenImageEditPromptImageEncoder.encode(
             store: store,
             modelPath: modelPath,
-            sourceImage: sourceImage,
+            sourceImages: sourceImages,
             prompt: "",
             plan: plan)
         let conditioning = try QwenImageEditConditioner.encode(
             store: store,
-            sourceImage: sourceImage,
+            sourceImages: sourceImages,
             plan: plan)
 
         let targetRows = plan.outputHeight / 16

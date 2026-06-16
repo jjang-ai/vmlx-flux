@@ -83,6 +83,54 @@ final class QwenImageEditSupportTests: XCTestCase {
         XCTAssertEqual(plan.vlHeight, 320)
     }
 
+    func testPreprocessPlanUsesLastSourceImageDimensionsForMultiImageEdit() throws {
+        let first = try makePNG(width: 1536, height: 1024)
+        let second = try makePNG(width: 480, height: 640)
+
+        let plan = try QwenImageEditPreprocessPlan(
+            sourceImages: [first, second],
+            requestedWidth: nil,
+            requestedHeight: nil,
+            steps: 20,
+            guidance: 4.0)
+
+        XCTAssertEqual(plan.outputWidth, 896)
+        XCTAssertEqual(plan.outputHeight, 1184)
+        XCTAssertEqual(plan.vlWidth, 320)
+        XCTAssertEqual(plan.vlHeight, 448)
+        XCTAssertEqual(plan.vaeWidth, 896)
+        XCTAssertEqual(plan.vaeHeight, 1184)
+    }
+
+    func testImageEditRequestPreservesMultipleSourceImages() throws {
+        let first = try makePNG(width: 64, height: 64)
+        let second = try makePNG(width: 64, height: 64, rgba: (0, 128, 255, 255))
+        let outputDir = FileManager.default.temporaryDirectory
+
+        let request = try ImageEditRequest(
+            prompt: "combine both references",
+            sourceImages: [first, second],
+            steps: 4,
+            guidance: 4.0,
+            outputDir: outputDir)
+
+        XCTAssertEqual(request.sourceImage, first)
+        XCTAssertEqual(request.sourceImages, [first, second])
+    }
+
+    func testImageEditRequestRejectsEmptySourceImages() {
+        XCTAssertThrowsError(
+            try ImageEditRequest(
+                prompt: "missing references",
+                sourceImages: [],
+                outputDir: FileManager.default.temporaryDirectory)
+        ) { error in
+            XCTAssertEqual(
+                String(describing: error),
+                "invalid request: ImageEditRequest requires at least one source image")
+        }
+    }
+
     func testVisionInputMatchesQwenVLProcessorShapeAndNormalization() throws {
         let source = try makePNG(width: 512, height: 512, rgba: (255, 128, 0, 255))
         let plan = try QwenImageEditPreprocessPlan(
@@ -196,6 +244,27 @@ final class QwenImageEditSupportTests: XCTestCase {
         XCTAssertEqual(inputs.conditioningLatentCount, 4056)
         XCTAssertEqual(inputs.imageShapes.map { [$0.frame, $0.height, $0.width] }, [[1, 52, 78], [1, 52, 78]])
         XCTAssertEqual(inputs.targetVelocitySlice.shape, [1, 4056, 64])
+    }
+
+    func testTransformerInputsAcceptMultipleConditioningImages() throws {
+        let target = MLXArray.zeros([1, 256, 64], dtype: .float32)
+        let conditioning = QwenImageEditConditioningLatents(
+            latents: MLXArray.ones([1, 12, 64], dtype: .float32),
+            imageIDs: MLXArray.zeros([1, 12, 3], dtype: .float32),
+            patchRows: 2,
+            patchColumns: 3,
+            imageCount: 2)
+
+        let inputs = try QwenImageEditTransformerInputs(
+            targetLatents: target,
+            conditioning: conditioning)
+
+        XCTAssertEqual(inputs.hiddenStates.shape, [1, 268, 64])
+        XCTAssertEqual(inputs.targetLatentCount, 256)
+        XCTAssertEqual(inputs.conditioningLatentCount, 12)
+        XCTAssertEqual(
+            inputs.imageShapes.map { [$0.frame, $0.height, $0.width] },
+            [[1, 16, 16], [1, 2, 3], [1, 2, 3]])
     }
 
     func testQwenEditRoPECombinesTargetAndConditioningImageGrids() {

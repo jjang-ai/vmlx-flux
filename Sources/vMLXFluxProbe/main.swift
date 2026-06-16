@@ -156,6 +156,7 @@ struct VMLXFluxProbe {
             "width_explicit": options.widthExplicit,
             "height_explicit": options.heightExplicit,
             "source_image": options.sourceImage?.path ?? NSNull(),
+            "source_images": options.sourceImages.map(\.path),
             "mask_image": options.maskImage?.path ?? NSNull(),
             "steps": options.steps,
             "seed": options.seed.map { $0 as Any } ?? NSNull(),
@@ -235,14 +236,14 @@ struct VMLXFluxProbe {
             }
 
             if options.edit {
-                guard let sourceImage = options.sourceImage else {
+                guard !options.sourceImages.isEmpty else {
                     throw ProbeError("--edit requires --source-image")
                 }
                 var turnRecords: [[String: Any]] = []
                 for (index, prompt) in options.turns.enumerated() {
-                    let request = ImageEditRequest(
+                    let request = try ImageEditRequest(
                         prompt: prompt,
-                        sourceImage: sourceImage,
+                        sourceImages: options.sourceImages,
                         mask: options.maskImage,
                         strength: options.strength,
                         width: options.widthExplicit ? options.width : nil,
@@ -255,7 +256,8 @@ struct VMLXFluxProbe {
                     var record: [String: Any] = [
                         "turn": index + 1,
                         "prompt": prompt,
-                        "source_image": sourceImage.path,
+                        "source_image": options.sourceImage?.path ?? NSNull(),
+                        "source_images": options.sourceImages.map(\.path),
                         "mask_image": options.maskImage?.path ?? NSNull(),
                         "started_at": isoTimestamp(turnStart),
                     ]
@@ -307,14 +309,14 @@ struct VMLXFluxProbe {
             }
 
             if options.qwenEditConditioning {
-                guard let sourceImage = options.sourceImage else {
+                guard !options.sourceImages.isEmpty else {
                     throw ProbeError("--qwen-edit-conditioning requires --source-image")
                 }
                 guard local.canonicalName == "qwen-image-edit" else {
                     throw ProbeError("--qwen-edit-conditioning requires a qwen-image-edit model")
                 }
                 let plan = try QwenImageEditPreprocessPlan(
-                    sourceImage: sourceImage,
+                    sourceImages: options.sourceImages,
                     requestedWidth: options.widthExplicit ? options.width : nil,
                     requestedHeight: options.heightExplicit ? options.height : nil,
                     steps: options.steps,
@@ -322,7 +324,7 @@ struct VMLXFluxProbe {
                 let conditioningStart = Date()
                 let conditioning = try QwenImageEditConditioner.encode(
                     modelPath: local.directory,
-                    sourceImage: sourceImage,
+                    sourceImages: options.sourceImages,
                     plan: plan)
                 payload["qwen_edit_conditioning"] = [
                     "status": "encoded",
@@ -335,6 +337,7 @@ struct VMLXFluxProbe {
                     "conditioning_height": plan.vlHeight,
                     "patch_rows": conditioning.patchRows,
                     "patch_columns": conditioning.patchColumns,
+                    "image_count": conditioning.imageCount,
                     "latents_shape": conditioning.latents.shape,
                     "image_ids_shape": conditioning.imageIDs.shape,
                     "latents_stats": mlxStats(conditioning.latents),
@@ -343,31 +346,33 @@ struct VMLXFluxProbe {
             }
 
             if options.qwenEditPrompt {
-                guard let sourceImage = options.sourceImage else {
+                guard !options.sourceImages.isEmpty else {
                     throw ProbeError("--qwen-edit-prompt requires --source-image")
                 }
                 guard local.canonicalName == "qwen-image-edit" else {
                     throw ProbeError("--qwen-edit-prompt requires a qwen-image-edit model")
                 }
                 let plan = try QwenImageEditPreprocessPlan(
-                    sourceImage: sourceImage,
+                    sourceImages: options.sourceImages,
                     requestedWidth: options.widthExplicit ? options.width : nil,
                     requestedHeight: options.heightExplicit ? options.height : nil,
                     steps: options.steps,
                     guidance: options.guidance ?? 4.0)
-                let visionInput = try QwenImageEditPreprocessor.visionInput(
-                    sourceImage: sourceImage,
-                    plan: plan)
+                let visionInputs = try options.sourceImages.map {
+                    try QwenImageEditPreprocessor.visionInput(sourceImage: $0, plan: plan)
+                }
+                let imageTokenCounts = visionInputs.map(\.imageTokenCount)
+                let totalImageTokenCount = imageTokenCounts.reduce(0, +)
                 let tokenizer = try await QwenImageEditPromptTokenizer(modelPath: local.directory)
                 var promptRecords: [[String: Any]] = []
                 for prompt in options.turns {
                     let promptInput = try QwenImageEditPreprocessor.visionLanguagePrompt(
                         prompt: prompt,
-                        imageTokenCounts: [visionInput.imageTokenCount])
+                        imageTokenCounts: imageTokenCounts)
                     let tokens = tokenizer.tokenize(promptInput)
-                    guard tokens.imageTokenCount == visionInput.imageTokenCount else {
+                    guard tokens.imageTokenCount == totalImageTokenCount else {
                         throw ProbeError(
-                            "qwen edit prompt image token count mismatch: got \(tokens.imageTokenCount), expected \(visionInput.imageTokenCount)")
+                            "qwen edit prompt image token count mismatch: got \(tokens.imageTokenCount), expected \(totalImageTokenCount)")
                     }
                     promptRecords.append([
                         "status": "tokenized",
@@ -377,23 +382,24 @@ struct VMLXFluxProbe {
                         "attention_mask_shape": tokens.attentionMask.shape,
                         "image_token_id": QwenImageEditPreprocessor.imageTokenID,
                         "image_token_count": tokens.imageTokenCount,
-                        "expected_image_token_count": visionInput.imageTokenCount,
+                        "expected_image_token_count": totalImageTokenCount,
+                        "image_token_counts": imageTokenCounts,
                         "template_drop_index": tokens.templateDropIndex,
-                        "image_grid_thw": visionInput.imageGridTHW,
+                        "image_grid_thw": visionInputs.map(\.imageGridTHW),
                     ])
                 }
                 payload["qwen_edit_prompt_tokens"] = promptRecords
             }
 
             if options.qwenEditVision {
-                guard let sourceImage = options.sourceImage else {
+                guard !options.sourceImages.isEmpty else {
                     throw ProbeError("--qwen-edit-vision requires --source-image")
                 }
                 guard local.canonicalName == "qwen-image-edit" else {
                     throw ProbeError("--qwen-edit-vision requires a qwen-image-edit model")
                 }
                 let plan = try QwenImageEditPreprocessPlan(
-                    sourceImage: sourceImage,
+                    sourceImages: options.sourceImages,
                     requestedWidth: options.widthExplicit ? options.width : nil,
                     requestedHeight: options.heightExplicit ? options.height : nil,
                     steps: options.steps,
@@ -403,14 +409,14 @@ struct VMLXFluxProbe {
                     let visionStart = Date()
                     let encoding = try await QwenImageEditPromptImageEncoder.encode(
                         modelPath: local.directory,
-                        sourceImage: sourceImage,
+                        sourceImages: options.sourceImages,
                         prompt: prompt,
                         plan: plan)
                     encodingRecords.append([
                         "status": "encoded",
                         "elapsed_seconds": Date().timeIntervalSince(visionStart),
                         "prompt": prompt,
-                        "image_grid_thw": encoding.features.imageGridTHW,
+                        "image_grid_thw": encoding.features.imageGridTHWs,
                         "feature_shape": encoding.features.imageFeatures.shape,
                         "feature_stats": mlxStats(encoding.features.imageFeatures),
                         "image_token_count": encoding.features.imageTokenCount,
@@ -428,14 +434,14 @@ struct VMLXFluxProbe {
             }
 
             if options.qwenEditDenoise {
-                guard let sourceImage = options.sourceImage else {
+                guard !options.sourceImages.isEmpty else {
                     throw ProbeError("--qwen-edit-denoise requires --source-image")
                 }
                 guard local.canonicalName == "qwen-image-edit" else {
                     throw ProbeError("--qwen-edit-denoise requires a qwen-image-edit model")
                 }
                 let plan = try QwenImageEditPreprocessPlan(
-                    sourceImage: sourceImage,
+                    sourceImages: options.sourceImages,
                     requestedWidth: options.widthExplicit ? options.width : nil,
                     requestedHeight: options.heightExplicit ? options.height : nil,
                     steps: options.steps,
@@ -446,7 +452,7 @@ struct VMLXFluxProbe {
                     let denoiseStart = Date()
                     let result = try await QwenImageEditDenoiseProbe.predictVelocity(
                         modelPath: local.directory,
-                        sourceImage: sourceImage,
+                        sourceImages: options.sourceImages,
                         prompt: prompt,
                         plan: plan,
                         seed: seed)
@@ -760,7 +766,8 @@ struct ProbeOptions {
     var seed: UInt64?
     var guidance: Float?
     var negativePrompt: String?
-    var sourceImage: URL?
+    var sourceImages: [URL] = []
+    var sourceImage: URL? { sourceImages.first }
     var maskImage: URL?
     var strength: Float = 0.75
     var turns = Self.defaultTurns
@@ -831,7 +838,7 @@ struct ProbeOptions {
             case "--negative":
                 negativePrompt = try Self.value(after: arg, in: arguments, index: &index)
             case "--source-image":
-                sourceImage = URL(fileURLWithPath: try Self.value(after: arg, in: arguments, index: &index))
+                sourceImages.append(URL(fileURLWithPath: try Self.value(after: arg, in: arguments, index: &index)))
             case "--mask-image":
                 maskImage = URL(fileURLWithPath: try Self.value(after: arg, in: arguments, index: &index))
             case "--strength":

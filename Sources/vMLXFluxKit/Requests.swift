@@ -44,6 +44,7 @@ public struct ImageGenRequest: Sendable {
 public struct ImageEditRequest: Sendable {
     public var prompt: String
     public var sourceImage: URL
+    public var sourceImages: [URL]
     public var mask: URL?          // optional PNG mask — white=edit, black=keep
     public var strength: Float     // 0..1 — how much to deviate from source
     public var width: Int?         // nil → match source
@@ -69,6 +70,37 @@ public struct ImageEditRequest: Sendable {
     ) {
         self.prompt = prompt
         self.sourceImage = sourceImage
+        self.sourceImages = [sourceImage]
+        self.mask = mask
+        self.strength = strength
+        self.width = width
+        self.height = height
+        self.steps = steps
+        self.guidance = guidance
+        self.seed = seed
+        self.outputDir = outputDir
+        self.outputFormat = outputFormat
+    }
+
+    public init(
+        prompt: String,
+        sourceImages: [URL],
+        mask: URL? = nil,
+        strength: Float = 0.75,
+        width: Int? = nil,
+        height: Int? = nil,
+        steps: Int = 20,
+        guidance: Float = 3.5,
+        seed: UInt64? = nil,
+        outputDir: URL,
+        outputFormat: ImageFormat = .png
+    ) throws {
+        guard let sourceImage = sourceImages.first else {
+            throw FluxError.invalidRequest("ImageEditRequest requires at least one source image")
+        }
+        self.prompt = prompt
+        self.sourceImage = sourceImage
+        self.sourceImages = sourceImages
         self.mask = mask
         self.strength = strength
         self.width = width

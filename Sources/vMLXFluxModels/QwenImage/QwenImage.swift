@@ -102,7 +102,7 @@ public final class QwenImageEdit: ImageEditor, @unchecked Sendable {
                     let pipeline = try QwenImageEditPipeline(modelPath: self.modelPath)
                     let image = try await pipeline.edit(
                         prompt: request.prompt,
-                        sourceImage: request.sourceImage,
+                        sourceImages: request.sourceImages,
                         width: request.width,
                         height: request.height,
                         steps: request.steps,
