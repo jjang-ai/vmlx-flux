@@ -149,6 +149,7 @@ struct VMLXFluxProbe {
             "qwen_edit_prompt_requested": options.qwenEditPrompt,
             "qwen_edit_conditioning_requested": options.qwenEditConditioning,
             "qwen_edit_vision_requested": options.qwenEditVision,
+            "qwen_edit_denoise_requested": options.qwenEditDenoise,
             "turns": options.turns,
             "width": options.width,
             "height": options.height,
@@ -421,6 +422,52 @@ struct VMLXFluxProbe {
                 }
                 payload["qwen_edit_vision_language"] = encodingRecords
             }
+
+            if options.qwenEditDenoise {
+                guard let sourceImage = options.sourceImage else {
+                    throw ProbeError("--qwen-edit-denoise requires --source-image")
+                }
+                guard local.canonicalName == "qwen-image-edit" else {
+                    throw ProbeError("--qwen-edit-denoise requires a qwen-image-edit model")
+                }
+                let plan = try QwenImageEditPreprocessPlan(
+                    sourceImage: sourceImage,
+                    requestedWidth: options.widthExplicit ? options.width : nil,
+                    requestedHeight: options.heightExplicit ? options.height : nil,
+                    steps: options.steps,
+                    guidance: options.guidance ?? 4.0)
+                var denoiseRecords: [[String: Any]] = []
+                for (index, prompt) in options.turns.enumerated() {
+                    let seed = options.seed ?? UInt64(index + 1)
+                    let denoiseStart = Date()
+                    let result = try await QwenImageEditDenoiseProbe.predictVelocity(
+                        modelPath: local.directory,
+                        sourceImage: sourceImage,
+                        prompt: prompt,
+                        plan: plan,
+                        seed: seed)
+                    denoiseRecords.append([
+                        "status": "predicted",
+                        "elapsed_seconds": Date().timeIntervalSince(denoiseStart),
+                        "prompt": prompt,
+                        "seed": seed,
+                        "output_width": plan.outputWidth,
+                        "output_height": plan.outputHeight,
+                        "vae_width": plan.vaeWidth,
+                        "vae_height": plan.vaeHeight,
+                        "steps": plan.steps,
+                        "guidance": plan.guidance,
+                        "target_latent_count": result.targetLatentCount,
+                        "conditioning_latent_count": result.conditioningLatentCount,
+                        "image_shapes": result.imageShapes.map { [$0.frame, $0.height, $0.width] },
+                        "combined_velocity_shape": result.combinedVelocity.shape,
+                        "target_velocity_shape": result.targetVelocity.shape,
+                        "combined_velocity_stats": mlxStats(result.combinedVelocity),
+                        "target_velocity_stats": mlxStats(result.targetVelocity),
+                    ])
+                }
+                payload["qwen_edit_denoise"] = denoiseRecords
+            }
         } catch {
             payload["load_status"] = "failed"
             payload["error"] = String(describing: error)
@@ -568,9 +615,9 @@ struct VMLXFluxProbe {
         case "qwen-image-edit":
             return [
                 "model edit body throws FluxError.notImplemented",
-                "Qwen2.5-VL vision encoder implementation is missing",
-                "conditioning latent concat and denoise loop are missing from the ImageEditor body",
-                "live image-edit proof is missing",
+                "Qwen2.5-VL prompt-image encode, VAE conditioning, and first transformer velocity boundaries are probe-only",
+                "scheduler loop and VAE decode are missing from the ImageEditor body",
+                "live edited-image proof is missing",
             ]
         case "flux1-dev", "flux1-kontext", "flux1-fill",
              "flux2-klein", "flux2-klein-edit", "fibo", "seedvr2":
@@ -655,6 +702,7 @@ struct ProbeOptions {
     var qwenEditPrompt = false
     var qwenEditConditioning = false
     var qwenEditVision = false
+    var qwenEditDenoise = false
     var json = false
     var width = 256
     var height = 256
@@ -701,6 +749,9 @@ struct ProbeOptions {
                 load = true
             case "--qwen-edit-vision":
                 qwenEditVision = true
+                load = true
+            case "--qwen-edit-denoise":
+                qwenEditDenoise = true
                 load = true
             case "--no-generate":
                 generate = false

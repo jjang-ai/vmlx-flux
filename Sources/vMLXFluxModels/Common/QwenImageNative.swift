@@ -226,7 +226,17 @@ enum QwenRoPE {
     /// (txtCos,txtSin) shape (txtSeq,64). frame=1 for txt2img.
     static func freqs(latentH: Int, latentW: Int, txtLen: Int, dtype: DType)
         -> ((MLXArray, MLXArray), (MLXArray, MLXArray)) {
-        let h = latentH, w = latentW
+        freqs(
+            imageShapes: [(frame: 1, height: latentH, width: latentW)],
+            txtLen: txtLen,
+            dtype: dtype)
+    }
+
+    static func freqs(
+        imageShapes: [(frame: Int, height: Int, width: Int)],
+        txtLen: Int,
+        dtype: DType
+    ) -> ((MLXArray, MLXArray), (MLXArray, MLXArray)) {
         let posIdx = (0 ..< 4096).map { Float($0) }
         let negIdx = (0 ..< 4096).map { Float(-($0) - 1) }.reversed().map { $0 }  // reversed neg
         // per-axis pos/neg tables
@@ -243,23 +253,36 @@ enum QwenRoPE {
             var s = Array(neg.1.suffix(lo)); s += Array(pos.1.prefix(n / 2))
             return (c, s)
         }
-        let (hc, hs) = centeredRows(pf1, nf1, n: h)   // (h, 28)
-        let (wc, ws) = centeredRows(pf2, nf2, n: w)   // (w, 28)
 
-        // img: for each (r,c): [frame0(8) | hc[r](28) | wc[c](28)] = 64
         var imgCos = [Float](), imgSin = [Float]()
-        imgCos.reserveCapacity(h * w * 64); imgSin.reserveCapacity(h * w * 64)
-        for r in 0 ..< h {
-            for c in 0 ..< w {
-                imgCos += pf0.cos[0]; imgCos += hc[r]; imgCos += wc[c]
-                imgSin += pf0.sin[0]; imgSin += hs[r]; imgSin += ws[c]
+        let imageSeqLen = imageShapes.reduce(0) { total, shape in
+            total + shape.frame * shape.height * shape.width
+        }
+        imgCos.reserveCapacity(imageSeqLen * 64)
+        imgSin.reserveCapacity(imageSeqLen * 64)
+
+        var maxVid = 0
+        for (index, shape) in imageShapes.enumerated() {
+            let frame = shape.frame
+            let h = shape.height
+            let w = shape.width
+            maxVid = max(maxVid, h / 2, w / 2)
+            let (hc, hs) = centeredRows(pf1, nf1, n: h)   // (h, 28)
+            let (wc, ws) = centeredRows(pf2, nf2, n: w)   // (w, 28)
+            for frameIndex in 0 ..< frame {
+                let frameFreqIndex = index + frameIndex
+                for r in 0 ..< h {
+                    for c in 0 ..< w {
+                        imgCos += pf0.cos[frameFreqIndex]; imgCos += hc[r]; imgCos += wc[c]
+                        imgSin += pf0.sin[frameFreqIndex]; imgSin += hs[r]; imgSin += ws[c]
+                    }
+                }
             }
         }
-        let imgCosA = MLXArray(imgCos, [h * w, 64]).asType(dtype)
-        let imgSinA = MLXArray(imgSin, [h * w, 64]).asType(dtype)
+        let imgCosA = MLXArray(imgCos, [imageSeqLen, 64]).asType(dtype)
+        let imgSinA = MLXArray(imgSin, [imageSeqLen, 64]).asType(dtype)
 
         // txt: pos_freqs[maxVidIndex : +txtLen] across all axes (8+28+28=64)
-        let maxVid = max(h / 2, w / 2)
         var txtCos = [Float](), txtSin = [Float]()
         for j in 0 ..< txtLen {
             let i = maxVid + j
@@ -432,12 +455,28 @@ final class QwenTransformer {
     /// latentH/W (in latent units = px//16). Returns (1, imgSeq, 64).
     func callAsFunction(latents: MLXArray, promptEmbeds: MLXArray, timestep: Float,
                         latentH: Int, latentW: Int) -> MLXArray {
+        callAsFunction(
+            latents: latents,
+            promptEmbeds: promptEmbeds,
+            timestep: timestep,
+            imageShapes: [(frame: 1, height: latentH, width: latentW)])
+    }
+
+    /// Edit path variant: `latents` can include target image latents followed by
+    /// static conditioning-image latents. `imageShapes` must describe those
+    /// image-token grids in the same order, matching mflux `cond_image_grid`.
+    func callAsFunction(
+        latents: MLXArray,
+        promptEmbeds: MLXArray,
+        timestep: Float,
+        imageShapes: [(frame: Int, height: Int, width: Int)]
+    ) -> MLXArray {
         var img = imgIn(latents)
         var txt = txtIn(txtNorm(promptEmbeds))
         let text = timeEmbed(timestep)
         let txtSeq = txt.dim(1)
         let ((imgCos, imgSin), (txtCos, txtSin)) =
-            QwenRoPE.freqs(latentH: latentH, latentW: latentW, txtLen: txtSeq, dtype: img.dtype)
+            QwenRoPE.freqs(imageShapes: imageShapes, txtLen: txtSeq, dtype: img.dtype)
         for block in blocks {
             (img, txt) = block(img, txt, text: text, imgCos: imgCos, imgSin: imgSin, txtCos: txtCos, txtSin: txtSin)
         }

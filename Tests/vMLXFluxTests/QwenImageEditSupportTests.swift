@@ -158,6 +158,55 @@ final class QwenImageEditSupportTests: XCTestCase {
             sourceSequenceLength: 276).validate())
     }
 
+    func testTransformerInputsConcatenateTargetAndConditioningLatents() throws {
+        let target = MLXArray.zeros([1, 256, 64], dtype: .float32)
+        let conditioning = QwenImageEditConditioningLatents(
+            latents: MLXArray.ones([1, 4096, 64], dtype: .float32),
+            imageIDs: MLXArray.zeros([1, 4096, 3], dtype: .float32),
+            patchRows: 64,
+            patchColumns: 64)
+
+        let inputs = try QwenImageEditTransformerInputs(
+            targetLatents: target,
+            conditioning: conditioning)
+
+        XCTAssertEqual(inputs.hiddenStates.shape, [1, 4352, 64])
+        XCTAssertEqual(inputs.targetLatentCount, 256)
+        XCTAssertEqual(inputs.conditioningLatentCount, 4096)
+        XCTAssertEqual(inputs.imageShapes.map { [$0.frame, $0.height, $0.width] }, [[1, 16, 16], [1, 64, 64]])
+        XCTAssertEqual(inputs.targetVelocitySlice.shape, [1, 256, 64])
+    }
+
+    func testQwenEditRoPECombinesTargetAndConditioningImageGrids() {
+        let ((imgCos, imgSin), (txtCos, txtSin)) = QwenRoPE.freqs(
+            imageShapes: [
+                (frame: 1, height: 16, width: 16),
+                (frame: 1, height: 64, width: 64),
+            ],
+            txtLen: 212,
+            dtype: .float32)
+
+        XCTAssertEqual(imgCos.shape, [4352, 64])
+        XCTAssertEqual(imgSin.shape, [4352, 64])
+        XCTAssertEqual(txtCos.shape, [212, 64])
+        XCTAssertEqual(txtSin.shape, [212, 64])
+    }
+
+    func testEditDenoiseResultExposesOnlyTargetVelocitySlice() throws {
+        let result = try QwenImageEditDenoiseResult(
+            combinedVelocity: MLXArray.zeros([1, 4352, 64], dtype: .float32),
+            targetLatentCount: 256,
+            imageShapes: [
+                QwenImageEditImageShape(frame: 1, height: 16, width: 16),
+                QwenImageEditImageShape(frame: 1, height: 64, width: 64),
+            ])
+
+        XCTAssertEqual(result.combinedVelocity.shape, [1, 4352, 64])
+        XCTAssertEqual(result.targetVelocity.shape, [1, 256, 64])
+        XCTAssertEqual(result.targetLatentCount, 256)
+        XCTAssertEqual(result.conditioningLatentCount, 4096)
+    }
+
     func testVAEInputUsesMinusOneToOneNCHWAtConditioningSize() throws {
         let source = try makePNG(width: 512, height: 512, rgba: (255, 128, 0, 255))
         let plan = try QwenImageEditPreprocessPlan(

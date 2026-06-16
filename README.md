@@ -148,9 +148,11 @@ for try await event in engine.generate(request) {
   prompt-token expansion (`input_ids_shape=1x276`, `image_token_count=196`,
   `template_drop_index=64`), Qwen2.5-VL prompt-image encoding
   (`feature_shape=196x3584`, `prompt_embeds_shape=1x212x3584`, finite stats),
-  and source-image VAE conditioning
-  (`latents_shape=1x4096x64`, `image_ids_shape=1x4096x3`, finite stats). This is
-  still `PARTIAL`; no edited image is generated yet.
+  source-image VAE conditioning
+  (`latents_shape=1x4096x64`, `image_ids_shape=1x4096x3`, finite stats), and the
+  first edit-shaped transformer velocity forward (`combined_velocity_shape=1x4352x64`,
+  `target_velocity_shape=1x256x64`, finite stats). This is still `PARTIAL`; no
+  edited image is generated yet.
 
 `vmlxflux-probe` is the scan/load/generate verification CLI. Run live probes from
 `/Users/eric/vmlx-swift` or another directory containing `default.metallib`; the
@@ -168,7 +170,9 @@ prompt-token proof at
 VL encode proof at
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-vl-encode-live/`, plus
 VAE-conditioning proof at
-`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-conditioning-live/`. Their
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-conditioning-live/`, plus
+first transformer velocity proof at
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-denoise-live/`. Their
 remaining ports need:
 
 1. **FluxTransformer** (Dual-encoder Flux1 + single-encoder Flux2, DiT)

@@ -53,8 +53,9 @@
   `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-conditioning-live/Qwen-Image-Edit-mflux-q4-load.json`
   with `qwen_edit_conditioning.status=encoded`, `latents_shape=1x4096x64`,
   `image_ids_shape=1x4096x3`, and finite min/mean/max stats. This proves the
-  conditioning boundary only; Qwen-VL prompt-image encoding, transformer latent
-  concat, denoise loop, and edited PNG output remain pending.
+  conditioning boundary only; later bullets cover Qwen-VL prompt-image encoding
+  and first transformer velocity proof. The scheduler loop, VAE decode, and
+  edited PNG output remain pending.
 - **Qwen-Image-Edit prompt-token boundary:** added the mflux edit prompt
   formatter (`Picture 1: <|vision_start|>...<|vision_end|>`, 196 repeated
   image-pad tokens for the 1x28x28 q4 source image grid) and real tokenizer
@@ -72,24 +73,38 @@
   with `load_status=loaded`, `feature_shape=196x3584`,
   `token_image_count=196`, `prompt_embeds_shape=1x212x3584`,
   `prompt_mask_shape=1x212`, and finite min/mean/max stats. This proves the
-  prompt-image encode boundary only; transformer latent concat, denoise loop,
-  decode, and edited PNG output remain pending.
+  prompt-image encode boundary only; a later bullet covers first transformer
+  velocity proof. The scheduler loop, VAE decode, and edited PNG output remain
+  pending.
+- **Qwen-Image-Edit first transformer denoise boundary:** added tested edit
+  transformer inputs that concatenate target latents with static conditioning
+  latents, multi-grid Qwen RoPE support for target+conditioning image grids,
+  and a result wrapper that exposes only the target velocity slice. Added probe
+  `--qwen-edit-denoise`; live q4 artifact:
+  `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-denoise-live/Qwen-Image-Edit-mflux-q4-load.json`
+  with `load_status=loaded`, `qwen_edit_denoise[0].status=predicted`,
+  `image_shapes=[[1,16,16],[1,64,64]]`, `combined_velocity_shape=1x4352x64`,
+  `target_velocity_shape=1x256x64`, and finite min/mean/max stats. This proves
+  one real transformer velocity forward at a 256x256 target only; the
+  scheduler loop, VAE decode, and edited PNG output remain pending.
 - **Qwen-Edit guardrail tests:** red test first caught the previous fake load
   (`QwenImageEdit` accepted a bundle missing vision tower keys). After the
   validator landed,
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter vMLXFluxTests.RegistryTests/testQwenImageEdit`
   passed 3 tests. The new
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter vMLXFluxTests.QwenImageEditSupportTests`
-  preprocess/edit-boundary suite now passes 12 tests, including Qwen-VL patch
-  shape/normalization, prompt-token expansion, VL feature/prompt-embedding
-  shape contracts, VAE input tensor shape/range, and static conditioning
-  latent pack/image-ID order. Full
+  preprocess/edit-boundary suite now passes 15 tests covering Qwen-VL patch
+  shape/normalization, prompt-token expansion, VL feature/prompt-embedding shape
+  contracts, VAE input tensor shape/range, static conditioning latent
+  pack/image-ID order, edit transformer concatenation, multi-grid Qwen RoPE, and
+  target velocity slicing. Full
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` passes
-  35 tests.
+  38 tests.
 - **Probe metadata fixed:** scan JSON now reports `native_pipeline_implemented`
   for `z-image-turbo`, `flux1-schnell`, and `qwen-image`; `qwen-image-edit`
-  remains `not_implemented` with blockers for transformer latent
-  concat/denoise loop, decode, and live edited-image proof.
+  remains `not_implemented` with blockers for moving the proven denoise boundary
+  into `ImageEditor`, completing the scheduler loop, decode, and live
+  edited-image proof.
 
 ### 2026-06-15 — native Z-Image proven + vendored into vmlx-swift
 - **`ZImageNative.swift` (NEW, 1202 lines)**: full native Z-Image-Turbo pipeline —

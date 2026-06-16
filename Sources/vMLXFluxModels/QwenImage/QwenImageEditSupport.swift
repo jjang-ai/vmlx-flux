@@ -1,6 +1,7 @@
 import Foundation
 @preconcurrency import MLX
 import MLXNN
+import MLXRandom
 import Tokenizers
 import vMLXFluxKit
 
@@ -218,6 +219,93 @@ public struct QwenImageEditConditioningLatents {
     public let patchColumns: Int
 }
 
+public struct QwenImageEditImageShape {
+    public let frame: Int
+    public let height: Int
+    public let width: Int
+}
+
+public struct QwenImageEditTransformerInputs {
+    public let hiddenStates: MLXArray
+    public let targetLatentCount: Int
+    public let conditioningLatentCount: Int
+    public let imageShapes: [QwenImageEditImageShape]
+
+    public var targetVelocitySlice: MLXArray {
+        hiddenStates[0..., 0 ..< targetLatentCount, 0...]
+    }
+
+    public init(
+        targetLatents: MLXArray,
+        conditioning: QwenImageEditConditioningLatents
+    ) throws {
+        guard targetLatents.shape.count == 3,
+              targetLatents.dim(0) == 1,
+              targetLatents.dim(2) == 64
+        else {
+            throw FluxError.invalidRequest("Qwen edit target latents must have shape 1xNx64")
+        }
+        guard conditioning.latents.shape.count == 3,
+              conditioning.latents.dim(0) == 1,
+              conditioning.latents.dim(2) == 64
+        else {
+            throw FluxError.invalidRequest("Qwen edit conditioning latents must have shape 1xNx64")
+        }
+        guard conditioning.patchRows > 0, conditioning.patchColumns > 0 else {
+            throw FluxError.invalidRequest("Qwen edit conditioning patch grid must be positive")
+        }
+        guard conditioning.latents.dim(1) == conditioning.patchRows * conditioning.patchColumns else {
+            throw FluxError.invalidRequest("Qwen edit conditioning latent count does not match patch grid")
+        }
+        guard conditioning.imageIDs.shape == [1, conditioning.latents.dim(1), 3] else {
+            throw FluxError.invalidRequest("Qwen edit conditioning image IDs must have shape 1xNx3")
+        }
+
+        let targetCount = targetLatents.dim(1)
+        let targetSide = Int(Double(targetCount).squareRoot())
+        guard targetSide * targetSide == targetCount else {
+            throw FluxError.invalidRequest("Qwen edit target latent count must form a square grid for this proof path")
+        }
+
+        self.hiddenStates = concatenated([targetLatents, conditioning.latents], axis: 1)
+        self.targetLatentCount = targetCount
+        self.conditioningLatentCount = conditioning.latents.dim(1)
+        self.imageShapes = [
+            QwenImageEditImageShape(frame: 1, height: targetSide, width: targetSide),
+            QwenImageEditImageShape(frame: 1, height: conditioning.patchRows, width: conditioning.patchColumns),
+        ]
+    }
+}
+
+public struct QwenImageEditDenoiseResult {
+    public let combinedVelocity: MLXArray
+    public let targetVelocity: MLXArray
+    public let targetLatentCount: Int
+    public let conditioningLatentCount: Int
+    public let imageShapes: [QwenImageEditImageShape]
+
+    public init(
+        combinedVelocity: MLXArray,
+        targetLatentCount: Int,
+        imageShapes: [QwenImageEditImageShape]
+    ) throws {
+        guard combinedVelocity.shape.count == 3,
+              combinedVelocity.dim(0) == 1,
+              combinedVelocity.dim(2) == 64
+        else {
+            throw FluxError.invalidRequest("Qwen edit combined velocity must have shape 1xNx64")
+        }
+        guard targetLatentCount > 0, targetLatentCount <= combinedVelocity.dim(1) else {
+            throw FluxError.invalidRequest("Qwen edit target velocity slice is outside combined velocity")
+        }
+        self.combinedVelocity = combinedVelocity
+        self.targetVelocity = combinedVelocity[0..., 0 ..< targetLatentCount, 0...]
+        self.targetLatentCount = targetLatentCount
+        self.conditioningLatentCount = combinedVelocity.dim(1) - targetLatentCount
+        self.imageShapes = imageShapes
+    }
+}
+
 public enum QwenImageEditPreprocessor {
     public static let patchSize = 14
     public static let temporalPatchSize = 2
@@ -432,6 +520,14 @@ public enum QwenImageEditConditioner {
         plan: QwenImageEditPreprocessPlan
     ) throws -> QwenImageEditConditioningLatents {
         let store = MFluxStore(try WeightLoader.load(from: modelPath))
+        return try encode(store: store, sourceImage: sourceImage, plan: plan)
+    }
+
+    static func encode(
+        store: MFluxStore,
+        sourceImage: URL,
+        plan: QwenImageEditPreprocessPlan
+    ) throws -> QwenImageEditConditioningLatents {
         let encoder = try Qwen3DVAEEncoder(store: store)
         let vaeInput = try QwenImageEditPreprocessor.vaeInput(sourceImage: sourceImage, plan: plan)
         let encoded = encoder.encode(vaeInput.tensor)
@@ -476,6 +572,21 @@ public enum QwenImageEditPromptImageEncoder {
         plan: QwenImageEditPreprocessPlan
     ) async throws -> QwenImageEditVisionLanguageEncoding {
         let store = MFluxStore(try WeightLoader.load(from: modelPath))
+        return try await encode(
+            store: store,
+            modelPath: modelPath,
+            sourceImage: sourceImage,
+            prompt: prompt,
+            plan: plan)
+    }
+
+    static func encode(
+        store: MFluxStore,
+        modelPath: URL,
+        sourceImage: URL,
+        prompt: String,
+        plan: QwenImageEditPreprocessPlan
+    ) async throws -> QwenImageEditVisionLanguageEncoding {
         let vision = try QwenImageEditVisionTransformer(store: store)
         let text = try QwenTextEncoder(store: store, dropIdx: QwenImageEditPreprocessor.editTemplateStartIndex)
         let tokenizer = try await QwenImageEditPromptTokenizer(modelPath: modelPath)
@@ -504,6 +615,52 @@ public enum QwenImageEditPromptImageEncoder {
             features: features,
             tokens: tokens,
             promptEmbeddings: promptEmbeddings)
+    }
+}
+
+public enum QwenImageEditDenoiseProbe {
+    public static func predictVelocity(
+        modelPath: URL,
+        sourceImage: URL,
+        prompt: String,
+        plan: QwenImageEditPreprocessPlan,
+        seed: UInt64?
+    ) async throws -> QwenImageEditDenoiseResult {
+        let store = MFluxStore(try WeightLoader.load(from: modelPath))
+        let promptEncoding = try await QwenImageEditPromptImageEncoder.encode(
+            store: store,
+            modelPath: modelPath,
+            sourceImage: sourceImage,
+            prompt: prompt,
+            plan: plan)
+        let conditioning = try QwenImageEditConditioner.encode(
+            store: store,
+            sourceImage: sourceImage,
+            plan: plan)
+
+        let targetRows = plan.outputHeight / 16
+        let targetColumns = plan.outputWidth / 16
+        let targetCount = targetRows * targetColumns
+        if let seed { MLXRandom.seed(seed) }
+        let targetLatents = MLXRandom.normal([1, targetCount, 64]).asType(.float32)
+        let inputs = try QwenImageEditTransformerInputs(
+            targetLatents: targetLatents,
+            conditioning: conditioning)
+        let transformer = try QwenTransformer(store: store)
+        let scheduler = FlowMatchEulerScheduler(steps: plan.steps, imageSeqLen: targetCount)
+        let imageShapes = inputs.imageShapes.map {
+            (frame: $0.frame, height: $0.height, width: $0.width)
+        }
+        let velocity = transformer(
+            latents: inputs.hiddenStates,
+            promptEmbeds: promptEncoding.promptEmbeddings.promptEmbeds,
+            timestep: scheduler.sigmas[0],
+            imageShapes: imageShapes)
+        eval(velocity)
+        return try QwenImageEditDenoiseResult(
+            combinedVelocity: velocity,
+            targetLatentCount: inputs.targetLatentCount,
+            imageShapes: inputs.imageShapes)
     }
 }
 
