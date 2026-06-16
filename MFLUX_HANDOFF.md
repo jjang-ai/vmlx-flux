@@ -655,10 +655,13 @@ Full per-model transcription specs are in `docs/FLUX_SCHNELL_PORT_PLAN.md` and `
   qwen-edit q5, and Ideogram NF4.
 - `osaurus-ai/vmlx-swift` main commit **`bb4cfaf4`** — current generation-proof
   baseline for z-image 4/8-bit, flux-schnell 4/8-bit, qwen-image 4/6-bit,
-  qwen-edit q4/q5, and Ideogram fp8/NF4, plus the Osaurus image UI manifest.
-- `jjang-ai/vmlx-flux` branch **`native-zimage-proven`** — standalone mirror of
-  the native work. Current branch head includes the image source/docs mirror and
-  root Osaurus image API spec.
+  qwen-edit q4/q5, and Ideogram fp8/NF4.
+- `osaurus-ai/vmlx-swift` main commit **`e7c5deef`** — first pushed docs and
+  probe-status refresh recording the bb4 proof baseline; later doc-only commits
+  may update this handoff without changing the runtime proof baseline.
+- `jjang-ai/vmlx-flux` branch **`native-zimage-proven`** from commit
+  **`4e277e4`** forward mirrors the bb4 image source/docs status and root
+  Osaurus image API spec.
 - Wiki note (private `jjang-ai/wiki`): `notes/2026-06-15-vmlx-flux-native-z-image-proven-fork-lockstep.md`.
 - Per-project memory: `~/.claude/projects/-Users-eric-vmlx-swift/memory/vmlx-flux-native-zimage-integration.md`.
 - Proof artifacts (gitignored): `docs/local/vmlx-flux-{outputs,probes}/` (PROOF-*, FLUX-proof, QWEN-proof, Q8b-*).
