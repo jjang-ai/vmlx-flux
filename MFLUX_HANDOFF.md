@@ -509,7 +509,7 @@ multi-reference text-image edit, not qwen mask/inpaint support.
 4. Osaurus app/server wiring: implement the `/v1/images/*` bridge from the
    specs below, wrap every image request in the required `MetalGate` exclusion,
    expose only proven variants, and pin Osaurus to `vmlx-origin/main`
-   `103be4375d88f7f8249b39853feedcf390d41465` or a later verified main SHA.
+   `5eda194e194fd8ebea6fd5dc4f528fe5b9959d25` or a later verified main SHA.
 
 ---
 
@@ -517,8 +517,9 @@ multi-reference text-image edit, not qwen mask/inpaint support.
 
 - **vmlx-swift integration worktree:** `/Users/eric/vmlx-swift-fluxwt` — clean
   Osaurus monorepo worktree for this lane. The current runtime-proof baseline is
-  `vmlx-origin/main` `103be4375d88f7f8249b39853feedcf390d41465`; later commits
-  in this lane must be source/test checked before pinning.
+  `vmlx-origin/main` `5eda194e194fd8ebea6fd5dc4f528fe5b9959d25`; later commits
+  in this lane must be source/test checked before pinning. Docs-only commits
+  after that SHA do not change the native image runtime source.
 - **Dirty local dev tree:** `/Users/eric/vmlx-swift` — branch
   `codex/mimo-v25-cache-contract` carries unrelated MLXPress/MiMo/Gemma/JANG
   WIP; do not commit the image-gen integration from that dirty checkout.
@@ -714,6 +715,8 @@ Full per-model transcription specs are in `FLUX_SCHNELL_PORT_PLAN.md` and `QWEN_
 
 ## 8. osaurus integration (for the UI/server team)
 - `OSAURUS_IMAGE_UI_MANIFEST.json` — machine-readable model/control/exposure/proof manifest for the UI/server bridge. It lists current show/hide decisions, variants, defaults, proof artifact paths, image hashes, and blocked rows.
+- `OSAURUS_IMAGE_OPENAPI.json` — machine-readable `/v1/images/*` route/schema contract for the Osaurus server bridge.
+- `scripts/vmlx-image-openapi-manifest-check.sh` — contract drift verifier for the manifest/OpenAPI pair. Set `VMLX_REQUIRE_LOCAL_PROOF=1` when local ignored proof artifacts are present and should be checked too.
 - `OSAURUS_VMLX_FLUX_INTEGRATION_SPEC.md` — engine API (`FluxEngine` actor: load/generate/edit/upscale), `ImageGenRequest`/events, model registry, per-model status, the **required MetalGate exclusion** (image-gen MLX eval races LLM eval on the shared Metal command buffer — same SIGABRT hazard as the Model2Vec embedder, osaurus PR #1507 — so gate it), quant matrix, gotchas.
 - `OSAURUS_IMAGE_API_SPEC.md` — UI-facing HTTP contract: `GET /v1/images/models`, `POST /v1/images/{generations,edits,upscale}`, every request setting (prompt/negative/steps/guidance/strength/size/seed/n/format), and the SSE **progress events** (`queued`→`loading_model`→`step{step,total,progress,eta}`→`completed`) so the UI shows "Step N/M" and never looks stuck.
 - The HTTP layer is a **proposed contract** — the engine is real, but the `/v1/images/*` endpoints aren't built in osaurus yet.
@@ -730,9 +733,11 @@ Full per-model transcription specs are in `FLUX_SCHNELL_PORT_PLAN.md` and `QWEN_
 4. **Osaurus app/server bridge:** the consolidated vMLX work is already on
    `osaurus-ai/vmlx-swift` main. Next osaurus-side work is the `/v1/images/*`
    bridge, model list/capability mapping, progress SSE, output file policy, and
-   `MetalGate` exclusion. Pin Osaurus to current `vmlx-origin/main` after this
-   docs/probe refresh; the minimum runtime-proof baseline is
-   `103be4375d88f7f8249b39853feedcf390d41465`.
+   `MetalGate` exclusion. Use `OSAURUS_IMAGE_OPENAPI.json` for route/schema
+   wiring and `OSAURUS_IMAGE_UI_MANIFEST.json` for dropdown/control exposure.
+   Pin Osaurus to current `vmlx-origin/main` after this docs/probe refresh; the
+   minimum current runtime-proof baseline is
+   `5eda194e194fd8ebea6fd5dc4f528fe5b9959d25`.
 
 **Reference:** the mflux Python source (the source of truth for every arch + weight key) is at `/tmp/mflux-ref` (clone of `github.com/filipstrand/mflux`). Re-clone if gone.
 
