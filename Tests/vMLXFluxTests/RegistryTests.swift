@@ -20,6 +20,7 @@ final class RegistryTests: XCTestCase {
         XCTAssertTrue(gens.contains("z-image-turbo"))
         XCTAssertTrue(gens.contains("qwen-image"))
         XCTAssertTrue(gens.contains("fibo"))
+        XCTAssertTrue(gens.contains("ideogram"))
     }
 
     func testAllImageEditModelsRegistered() {

@@ -597,7 +597,7 @@ struct VMLXFluxProbe {
             return "native_pipeline_partial"
         case "flux1-dev", "flux1-kontext", "flux1-fill",
              "flux2-klein", "flux2-klein-edit",
-             "fibo", "seedvr2":
+             "fibo", "ideogram", "seedvr2":
             return "not_implemented"
         case "wan-2.1", "wan-2.2":
             return "video_scaffold_only"
@@ -616,7 +616,8 @@ struct VMLXFluxProbe {
             ]
         case "qwen-image-edit":
             return [
-                "ImageEditor loop completes and writes PNGs, but q4 live outputs are still noise-like",
+                "ImageEditor loop completes and writes PNGs, but q4 live outputs do not yet follow edit prompts reliably",
+                "current apple-blue proof reconstructs/crops the red source apple instead of applying the requested blue edit; earlier rows were noise-like",
                 "prompt-image fidelity/edit quality root cause remains open",
                 "live coherent edited-image proof is missing",
             ]
@@ -626,6 +627,12 @@ struct VMLXFluxProbe {
                 "model generate/edit/upscale body throws FluxError.notImplemented",
                 "text encoder ports are missing",
                 "safetensors-to-module key mapping is missing",
+            ]
+        case "ideogram":
+            return [
+                "Ideogram4.generate body throws FluxError.notImplemented",
+                "local Ideogram bundle is not staged on the current proof machine",
+                "Qwen3 text encoder, 34-layer DiT key mapping, VAE, and fp8/nf4 quant path are missing",
             ]
         case "wan-2.1", "wan-2.2":
             return [

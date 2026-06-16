@@ -1,15 +1,25 @@
 # Qwen-Image / Qwen-Image-Edit native port plan (vMLXFlux)
 
-**Purpose:** a concrete, executable plan to take `qwen-image` and `qwen-image-edit`
-from `notImplemented` to a proven native pipeline, using the **already-proven
-`ZImageNative.swift`** as the reference template. For osaurus teammates + future
-porting sessions.
+**Purpose:** a concrete, executable port record for `qwen-image` and
+`qwen-image-edit`, using the **already-proven `ZImageNative.swift`** as the
+reference template. For osaurus teammates + future porting sessions.
 
-**Status (2026-06-15):** registered, scans/loads as a local mflux bundle, but
-`generate`/`edit` throw `FluxError.notImplemented`. The `qwen-image-mflux-4bit`
-(25 GB) bundle is NOT currently on disk — staging it onto the internal SSD
-(`~/.mlxstudio/models/image/`, per the GPU-watchdog rule) is **step 0** and is
-required before any live proof.
+**Status (2026-06-16):** `qwen-image` text-to-image is implemented in
+`Common/QwenImageNative.swift` and live-proven for the local 4-bit mflux bundle
+with same-seed determinism, prompt sensitivity, and visual inspection. In the
+Osaurus monorepo worktree, `qwen-image-mflux-4bit` also has fresh load proof at
+`docs/local/vmlx-flux-probes/2026-06-16-osaurus-qwen-image-q4-load-final/qwen-image-mflux-4bit-load.json`.
+`qwen-image-edit` is still `PARTIAL`: q4 load, prompt-image token expansion,
+Qwen2.5-VL image encode, VAE conditioning, first edit transformer velocity, and
+ImageEditor scheduler/decode/PNG plumbing are live-proven, but the viewed edit
+outputs do not yet follow edit prompts reliably. Earlier rows were noise-like;
+the current apple-blue proof reconstructs/crops the red source apple instead of
+applying the requested blue edit. Do not expose it as a normal user model until
+coherent edited-image proof exists.
+
+The sections below are the grounded port notes and transcription record. Older
+"next" checkboxes may describe the sequence that produced the current native
+txt2img implementation; the live status above is the source of truth.
 
 > Do NOT mark this done without a live same-seed/different-prompt proof (the HARD
 > RULE). The Z-Image proof in `OSAURUS_VMLX_FLUX_INTEGRATION_SPEC.md` §11 is the bar.
