@@ -167,6 +167,7 @@ strips `-4bit`/`-8bit`/`-3bit` suffix, collapses `flux.1`→`flux1`, `_`→`-`. 
 | `z-image-turbo` | Z-Image Turbo | imageGen | 4 / 0.0 |
 | `qwen-image` | Qwen-Image | imageGen | — |
 | `fibo` | FIBO | imageGen | — |
+| `ideogram` | Ideogram 4 | imageGen | 28 / 3.5 (fp8 weights: ideogram-ai/ideogram-4-fp8) |
 | `flux1-kontext` | FLUX.1 Kontext | imageEdit (prompt-only) | — |
 | `flux1-fill` | FLUX.1 Fill | imageEdit (mask) | — |
 | `flux2-klein-edit` | FLUX.2 Klein Edit | imageEdit | — |
@@ -215,10 +216,12 @@ their 4-bit linears through scale tensors at load time inside the model.
 | Canonical | Native runtime status | What's real | What's missing |
 |---|---|---|---|
 | **z-image-turbo** | `native_pipeline_implemented` | Full native port: Qwen-style text encoder, patchify+caption-concat DiT (noise/context refiners + unified layers, RoPE, adaLN, timestep embed), real `AutoencoderKL` VAE decode, real 4-bit weight decode, PNG out. | Live same-seed prompt-sensitivity proof (see §8). 1024px tuning. |
-| qwen-image / qwen-image-edit | `not_implemented` | Bundle scans + loads. | Qwen text-encoder port + transformer weight key-map. Body throws `notImplemented`. |
+| **qwen-image** | ✅ **WORKING (live-proven 2026-06-15)** | Full native pipeline `QwenImageNative.swift`: Qwen2.5 LM text encoder (GQA), 60-layer MM-DiT (joint attention + 3-axis RoPE), 3D causal-conv VAE, CFG. 384px/20-step ~21s; deterministic + prompt-sensitive + coherent (photo apple; watercolor mountain). | tokenizer.json ships in bundle. 8-bit/full + qwen-image-edit (vision tower) pending. Two port bugs fixed: VAE conv weights are MLX channels-last (not PyTorch); qwen timestep is raw sigma (QwenTimesteps applies ×1000 internally). |
+| qwen-image-edit | `not_implemented` | scaffold | qwen-image txt2img pipeline + Qwen2.5-VL vision tower for image conditioning. |
 | flux2-klein / flux2-klein-edit | `not_implemented` | Bundle scans + loads; `FluxDiTConfig.flux2Klein` preset exists. | T5 (single-encoder) port + weight key-map + 3-axis RoPE. |
 | **flux1-schnell** | ✅ **WORKING (live-proven 2026-06-15)** | Full native pipeline `Flux1Native.swift`: T5-XXL + CLIP-L encoders, full DiT (19 joint + 38 single blocks, 24h×128, 3-axis RoPE), AutoencoderKL VAE, 4-bit mflux decode. 512px/4-step ~3.9s; deterministic + prompt-sensitive + coherent. | tokenizer.json must be staged (mflux ships slow tokenizers — convert; see port plan). 8-bit/full quant matrix pending. |
 | flux1-dev/kontext/fill | `not_implemented` | dev = schnell + guidance embedder (small add); kontext/fill = edit variants. | wire guidance + edit conditioning on the working schnell pipeline. |
+| **ideogram** (Ideogram 4) | `not_implemented` (scaffold registered) | Strong text/typography renderer. mflux-compatible weights: `ideogram-ai/ideogram-4-fp8` or `ideogram-ai/ideogram-4-nf4` (4-bit). | Port = Qwen3 text encoder (reuse Qwen LM pattern) + 34-layer DiT (emb 4608, 18 heads, llm_features 4096×13 multi-layer, rope 5e6) + VAE. **Needs an fp8 quant path** (mflux fp8_linear) — different from the MLX group-quant the others use. |
 | seedvr2 | scaffold | registered | upscale arch (different family). |
 | wan-2.1 / wan-2.2 | scaffold | full pipeline scaffolded (WanVAE3D + WanDiT + MP4 writer) with random weights. | real weight key-map, real Conv3d (currently a Conv2d shim), windowed attention for >3-4s clips. |
 

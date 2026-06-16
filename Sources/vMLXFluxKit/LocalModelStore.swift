@@ -140,6 +140,9 @@ public struct MLXStudioModelStore: Sendable {
         if key.contains("qwen-image") || key.contains("qwenimage") {
             return key.contains("edit") ? "qwen-image-edit" : "qwen-image"
         }
+        if key.contains("ideogram") {
+            return "ideogram"
+        }
         if key.contains("flux2") || key.contains("flux-2") {
             return key.contains("edit") ? "flux2-klein-edit" : "flux2-klein"
         }
