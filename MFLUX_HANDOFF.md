@@ -10,6 +10,10 @@ qwen-image-edit q6. The current status/load matrix is
 `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-status-load-matrix/compatibility-matrix.json`
 and the viewed current output sheet is
 `docs/local/vmlx-flux-outputs/2026-06-16-current-ee9-contact-sheet.png`.
+The current proof-run summary is
+`docs/local/vmlx-flux-probes/2026-06-16-current-proof-run/current-proof-summary.json`
+(`status=passed`, matrix `14/14`) with viewed contact sheet
+`docs/local/vmlx-flux-outputs/2026-06-16-current-proof-run/current-proof-contact-sheet.png`.
 Qwen-edit q3 is now loadable after staging `q3/text_encoder/3.safetensors`, but
 its live edit output was viewed high-noise and not a clean prompt-following edit,
 so keep q3 hidden. Qwen masks are unsupported by the current mflux qwen-edit
@@ -25,6 +29,10 @@ was rebuilt and live-probed on `vmlx-origin/main`
 `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-status-load-matrix/compatibility-matrix.json`
 scanned 14 local image rows and loaded 14/14. Viewed contact sheet:
 `docs/local/vmlx-flux-outputs/2026-06-16-current-ee9-contact-sheet.png`.
+Current proof-run summary:
+`docs/local/vmlx-flux-probes/2026-06-16-current-proof-run/current-proof-summary.json`
+(`status=passed`, matrix `14/14`); viewed proof-run contact sheet:
+`docs/local/vmlx-flux-outputs/2026-06-16-current-proof-run/current-proof-contact-sheet.png`.
 Current ee9 live proof artifacts:
 `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-zimage-4bit-gen/Z-Image-Turbo-mflux-4bit-load.json`
 (apple/repeat `0ccf6cbd40d64bd186da937df1b4977707a64f9c4d5c16a5ae5083f482c09dba`,

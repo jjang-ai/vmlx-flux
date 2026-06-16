@@ -30,6 +30,13 @@ contract osaurus implements server-side and the UI builds against.
 > `2026-06-16-current-ee9-ideogram-nf4-bb4-exact/`.
 > Viewed contact sheet:
 > `docs/local/vmlx-flux-outputs/2026-06-16-current-ee9-contact-sheet.png`.
+> Current proof-run refresh:
+> `docs/local/vmlx-flux-probes/2026-06-16-current-proof-run/current-proof-summary.json`
+> reports `status=passed`, matrix `14/14` loaded, and deterministic
+> repeat/prompt-sensitivity checks passing for z-image-turbo 4/8-bit,
+> flux-schnell 4/8-bit, qwen-image 4/8-bit, qwen-edit q4/q8, and staged
+> Ideogram fp8/NF4. Viewed proof-run contact sheet:
+> `docs/local/vmlx-flux-outputs/2026-06-16-current-proof-run/current-proof-contact-sheet.png`.
 > Expose only proven local variants for normal testing. Keep qwen-edit q3 hidden:
 > it now loads after staging `q3/text_encoder/3.safetensors`, but the viewed
 > 20-step edit output is high-noise and not a clean prompt-following edit. Hide

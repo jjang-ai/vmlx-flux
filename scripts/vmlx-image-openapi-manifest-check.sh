@@ -38,6 +38,7 @@ const expectedRoutes = {
 check(manifest.status?.overall === "PARTIAL", "manifest status must remain PARTIAL until Osaurus HTTP/UI live proof exists");
 check(openapi.info?.["x-vmlx-status"] === manifest.status?.overall, "OpenAPI x-vmlx-status must match manifest status");
 check(openapi.info?.["x-vmlx-manifest"] === "OSAURUS_IMAGE_UI_MANIFEST.json", "OpenAPI must point to the UI manifest");
+check(manifest.source_trace?.current_proof_runner === "scripts/vmlx-image-current-proof.sh", "manifest must point to the current proof runner");
 
 for (const [key, expected] of Object.entries(expectedRoutes)) {
   const actual = manifest.http_surface?.[key];
@@ -151,10 +152,43 @@ if (requireLocalProof) {
       check(artifactShas.has(sha), `${object.proof_artifact}: expected sha ${sha} not found in artifact`);
     }
   }
-  for (const key of ["status_load_matrix", "visual_contact_sheet"]) {
+  for (const key of ["status_load_matrix", "visual_contact_sheet", "current_proof_summary", "current_proof_contact_sheet"]) {
     const relative = manifest.runtime_evidence?.[key];
     check(Boolean(relative), `runtime_evidence.${key} missing`);
     if (relative) check(fs.existsSync(path.join(root, relative)), `runtime_evidence.${key} missing on disk: ${relative}`);
+  }
+
+  const summaryRelative = manifest.runtime_evidence?.current_proof_summary;
+  if (summaryRelative && fs.existsSync(path.join(root, summaryRelative))) {
+    const summary = JSON.parse(fs.readFileSync(path.join(root, summaryRelative), "utf8"));
+    check(summary.status === "passed", "current proof summary status must be passed");
+    check(summary.matrix?.model_count === 14, "current proof summary matrix model_count must be 14");
+    check(summary.matrix?.loaded_count === 14, "current proof summary matrix loaded_count must be 14");
+    const expectedProofRows = new Set([
+      "zimage-4bit-gen",
+      "zimage-8bit-gen",
+      "flux-schnell-4bit-gen",
+      "flux-schnell-8bit-gen",
+      "qwen-image-4bit-gen",
+      "qwen-image-8bit-gen",
+      "qwen-edit-q4-gen",
+      "qwen-edit-q8-gen",
+      "ideogram-fp8-gen",
+      "ideogram-nf4-gen",
+    ]);
+    const rows = Array.isArray(summary.rows) ? summary.rows : [];
+    const actualRows = new Set(rows.map((row) => row.label));
+    for (const label of expectedProofRows) {
+      check(actualRows.has(label), `current proof summary missing row ${label}`);
+    }
+    for (const row of rows) {
+      if (!expectedProofRows.has(row.label)) continue;
+      check(row.status === "passed", `current proof summary row ${row.label} must be passed`);
+      check(row.deterministic_repeat === true, `current proof summary row ${row.label} missing deterministic repeat`);
+      check(row.prompt_sensitive === true, `current proof summary row ${row.label} missing prompt sensitivity`);
+      check(Array.isArray(row.shas) && row.shas.length === 3, `current proof summary row ${row.label} must include three shas`);
+      check(Array.isArray(row.outputs) && row.outputs.length === 3, `current proof summary row ${row.label} must include three outputs`);
+    }
   }
 }
 
