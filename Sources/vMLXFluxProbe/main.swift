@@ -593,8 +593,10 @@ struct VMLXFluxProbe {
         switch canonicalName {
         case "z-image-turbo", "flux1-schnell", "qwen-image":
             return "native_pipeline_implemented"
+        case "qwen-image-edit":
+            return "native_pipeline_partial"
         case "flux1-dev", "flux1-kontext", "flux1-fill",
-             "flux2-klein", "flux2-klein-edit", "qwen-image-edit",
+             "flux2-klein", "flux2-klein-edit",
              "fibo", "seedvr2":
             return "not_implemented"
         case "wan-2.1", "wan-2.2":
@@ -614,10 +616,9 @@ struct VMLXFluxProbe {
             ]
         case "qwen-image-edit":
             return [
-                "model edit body throws FluxError.notImplemented",
-                "Qwen2.5-VL prompt-image encode, VAE conditioning, and first transformer velocity boundaries are probe-only",
-                "scheduler loop and VAE decode are missing from the ImageEditor body",
-                "live edited-image proof is missing",
+                "ImageEditor loop completes and writes PNGs, but q4 live outputs are still noise-like",
+                "prompt-image fidelity/edit quality root cause remains open",
+                "live coherent edited-image proof is missing",
             ]
         case "flux1-dev", "flux1-kontext", "flux1-fill",
              "flux2-klein", "flux2-klein-edit", "fibo", "seedvr2":

@@ -93,36 +93,39 @@ public final class QwenImageEdit: ImageEditor, @unchecked Sendable {
 
     public func edit(_ request: ImageEditRequest) -> AsyncThrowingStream<ImageGenEvent, Error> {
         AsyncThrowingStream { continuation in
-            do {
-                let plan = try QwenImageEditPreprocessPlan(
-                    sourceImage: request.sourceImage,
-                    requestedWidth: request.width,
-                    requestedHeight: request.height,
-                    steps: request.steps,
-                    guidance: request.guidance)
-                _ = try QwenImageEditPreprocessPlan.imageIDs(
-                    height: plan.vaeHeight,
-                    width: plan.vaeWidth)
-                let visionInput = try QwenImageEditPreprocessor.visionInput(
-                    sourceImage: request.sourceImage,
-                    plan: plan)
-                let vaeInput = try QwenImageEditPreprocessor.vaeInput(
-                    sourceImage: request.sourceImage,
-                    plan: plan)
-                let visionGrid = visionInput.imageGridTHW.map(String.init).joined(separator: "x")
-                let vaeShape = vaeInput.tensor.shape.map(String.init).joined(separator: "x")
-                continuation.finish(throwing: FluxError.notImplemented(
-                    "QwenImageEdit.edit — Qwen2.5-VL vision encoder, VAE image encode, "
-                    + "conditioning latent concat, and denoise loop are still missing; "
-                    + "preprocess output=\(plan.outputWidth)x\(plan.outputHeight) "
-                    + "vl=\(plan.vlWidth)x\(plan.vlHeight) "
-                    + "vae=\(plan.vaeWidth)x\(plan.vaeHeight) "
-                    + "conditioning=\(plan.conditioningPatchRows)x\(plan.conditioningPatchColumns) "
-                    + "vision_patches=\(visionInput.pixelValues.dim(0))x\(visionInput.pixelValues.dim(1)) "
-                    + "vision_grid=\(visionGrid) "
-                    + "vae_input=\(vaeShape)"))
-            } catch {
-                continuation.finish(throwing: error)
+            Task { [weak self] in
+                guard let self else { continuation.finish(); return }
+                do {
+                    if request.mask != nil {
+                        throw FluxError.notImplemented("QwenImageEdit masks are not wired yet")
+                    }
+                    let pipeline = try QwenImageEditPipeline(modelPath: self.modelPath)
+                    let image = try await pipeline.edit(
+                        prompt: request.prompt,
+                        sourceImage: request.sourceImage,
+                        width: request.width,
+                        height: request.height,
+                        steps: request.steps,
+                        guidance: request.guidance,
+                        seed: request.seed
+                    ) { step, total, eta in
+                        continuation.yield(.step(step: step, total: total, etaSeconds: eta))
+                    }
+                    let outURL = try await MainActor.run {
+                        try ImageIO.writePNG(
+                            image,
+                            outputDir: request.outputDir,
+                            prefix: "qwen-image-edit")
+                    }
+                    continuation.yield(.completed(url: outURL, seed: request.seed ?? 0))
+                    continuation.finish()
+                } catch {
+                    let message = String(describing: error)
+                    continuation.yield(.failed(
+                        message: message,
+                        hfAuth: message.contains("401") || message.contains("403")))
+                    continuation.finish()
+                }
             }
         }
     }

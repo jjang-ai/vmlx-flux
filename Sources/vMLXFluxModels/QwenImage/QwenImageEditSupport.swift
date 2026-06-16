@@ -239,6 +239,27 @@ public struct QwenImageEditTransformerInputs {
         targetLatents: MLXArray,
         conditioning: QwenImageEditConditioningLatents
     ) throws {
+        guard targetLatents.shape.count == 3 else {
+            throw FluxError.invalidRequest("Qwen edit target latents must have shape 1xNx64")
+        }
+        let targetCount = targetLatents.dim(1)
+        let targetSide = Int(Double(targetCount).squareRoot())
+        guard targetSide * targetSide == targetCount else {
+            throw FluxError.invalidRequest("Qwen edit target latent count must form a square grid for this proof path")
+        }
+        try self.init(
+            targetLatents: targetLatents,
+            targetPatchRows: targetSide,
+            targetPatchColumns: targetSide,
+            conditioning: conditioning)
+    }
+
+    public init(
+        targetLatents: MLXArray,
+        targetPatchRows: Int,
+        targetPatchColumns: Int,
+        conditioning: QwenImageEditConditioningLatents
+    ) throws {
         guard targetLatents.shape.count == 3,
               targetLatents.dim(0) == 1,
               targetLatents.dim(2) == 64
@@ -262,16 +283,18 @@ public struct QwenImageEditTransformerInputs {
         }
 
         let targetCount = targetLatents.dim(1)
-        let targetSide = Int(Double(targetCount).squareRoot())
-        guard targetSide * targetSide == targetCount else {
-            throw FluxError.invalidRequest("Qwen edit target latent count must form a square grid for this proof path")
+        guard targetPatchRows > 0, targetPatchColumns > 0 else {
+            throw FluxError.invalidRequest("Qwen edit target patch grid must be positive")
+        }
+        guard targetCount == targetPatchRows * targetPatchColumns else {
+            throw FluxError.invalidRequest("Qwen edit target latent count does not match target patch grid")
         }
 
         self.hiddenStates = concatenated([targetLatents, conditioning.latents], axis: 1)
         self.targetLatentCount = targetCount
         self.conditioningLatentCount = conditioning.latents.dim(1)
         self.imageShapes = [
-            QwenImageEditImageShape(frame: 1, height: targetSide, width: targetSide),
+            QwenImageEditImageShape(frame: 1, height: targetPatchRows, width: targetPatchColumns),
             QwenImageEditImageShape(frame: 1, height: conditioning.patchRows, width: conditioning.patchColumns),
         ]
     }
@@ -645,6 +668,8 @@ public enum QwenImageEditDenoiseProbe {
         let targetLatents = MLXRandom.normal([1, targetCount, 64]).asType(.float32)
         let inputs = try QwenImageEditTransformerInputs(
             targetLatents: targetLatents,
+            targetPatchRows: targetRows,
+            targetPatchColumns: targetColumns,
             conditioning: conditioning)
         let transformer = try QwenTransformer(store: store)
         let scheduler = FlowMatchEulerScheduler(steps: plan.steps, imageSeqLen: targetCount)
@@ -661,6 +686,120 @@ public enum QwenImageEditDenoiseProbe {
             combinedVelocity: velocity,
             targetLatentCount: inputs.targetLatentCount,
             imageShapes: inputs.imageShapes)
+    }
+}
+
+final class QwenImageEditPipeline {
+    private let modelPath: URL
+    private let store: MFluxStore
+    private let transformer: QwenTransformer
+    private let decoder: Qwen3DVAEDecoder
+
+    init(modelPath: URL) throws {
+        self.modelPath = modelPath
+        self.store = MFluxStore(try WeightLoader.load(from: modelPath))
+        self.transformer = try QwenTransformer(store: store)
+        self.decoder = try Qwen3DVAEDecoder(store: store)
+    }
+
+    func edit(
+        prompt: String,
+        sourceImage: URL,
+        width: Int?,
+        height: Int?,
+        steps: Int,
+        guidance: Float,
+        seed: UInt64?,
+        progress: (Int, Int, Double?) -> Void
+    ) async throws -> MLXArray {
+        let plan = try QwenImageEditPreprocessPlan(
+            sourceImage: sourceImage,
+            requestedWidth: width,
+            requestedHeight: height,
+            steps: steps,
+            guidance: guidance)
+        let positive = try await QwenImageEditPromptImageEncoder.encode(
+            store: store,
+            modelPath: modelPath,
+            sourceImage: sourceImage,
+            prompt: prompt,
+            plan: plan)
+        let negative = try await QwenImageEditPromptImageEncoder.encode(
+            store: store,
+            modelPath: modelPath,
+            sourceImage: sourceImage,
+            prompt: "",
+            plan: plan)
+        let conditioning = try QwenImageEditConditioner.encode(
+            store: store,
+            sourceImage: sourceImage,
+            plan: plan)
+
+        let targetRows = plan.outputHeight / 16
+        let targetColumns = plan.outputWidth / 16
+        let targetCount = targetRows * targetColumns
+        if let seed { MLXRandom.seed(seed) }
+        var latents = MLXRandom.normal([1, targetCount, 64]).asType(.float32)
+        let scheduler = FlowMatchEulerScheduler(steps: plan.steps, imageSeqLen: targetCount)
+
+        let start = Date()
+        for step in 0 ..< plan.steps {
+            let inputs = try QwenImageEditTransformerInputs(
+                targetLatents: latents,
+                targetPatchRows: targetRows,
+                targetPatchColumns: targetColumns,
+                conditioning: conditioning)
+            let imageShapes = inputs.imageShapes.map {
+                (frame: $0.frame, height: $0.height, width: $0.width)
+            }
+            let timestep = scheduler.sigmas[step]
+            let positiveCombined = transformer(
+                latents: inputs.hiddenStates,
+                promptEmbeds: positive.promptEmbeddings.promptEmbeds,
+                timestep: timestep,
+                imageShapes: imageShapes)
+            let negativeCombined = transformer(
+                latents: inputs.hiddenStates,
+                promptEmbeds: negative.promptEmbeddings.promptEmbeds,
+                timestep: timestep,
+                imageShapes: imageShapes)
+            let positiveVelocity = try QwenImageEditDenoiseResult(
+                combinedVelocity: positiveCombined,
+                targetLatentCount: inputs.targetLatentCount,
+                imageShapes: inputs.imageShapes).targetVelocity
+            let negativeVelocity = try QwenImageEditDenoiseResult(
+                combinedVelocity: negativeCombined,
+                targetLatentCount: inputs.targetLatentCount,
+                imageShapes: inputs.imageShapes).targetVelocity
+            let guided = QwenGuidance.computeGuidedNoise(
+                positive: positiveVelocity,
+                negative: negativeVelocity,
+                guidance: plan.guidance)
+            latents = scheduler.step(latent: latents, velocity: guided, stepIndex: step)
+            eval(latents)
+            let elapsed = Date().timeIntervalSince(start)
+            progress(step + 1, plan.steps, elapsed / Double(step + 1) * Double(plan.steps - step - 1))
+        }
+
+        let unpacked = Self.unpackTargetLatents(
+            latents,
+            targetPatchRows: targetRows,
+            targetPatchColumns: targetColumns)
+        eval(unpacked)
+        let image = decoder.decode(unpacked)
+        eval(image)
+        return image
+    }
+
+    static func unpackTargetLatents(
+        _ latents: MLXArray,
+        targetPatchRows: Int,
+        targetPatchColumns: Int
+    ) -> MLXArray {
+        latents
+            .reshaped([1, targetPatchRows, targetPatchColumns, 16, 2, 2])
+            .transposed(0, 3, 1, 4, 2, 5)
+            .reshaped([1, 16, targetPatchRows * 2, targetPatchColumns * 2])
     }
 }
 

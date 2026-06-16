@@ -177,6 +177,27 @@ final class QwenImageEditSupportTests: XCTestCase {
         XCTAssertEqual(inputs.targetVelocitySlice.shape, [1, 256, 64])
     }
 
+    func testTransformerInputsAcceptNonSquareTargetGridFromPlan() throws {
+        let target = MLXArray.zeros([1, 4056, 64], dtype: .float32)
+        let conditioning = QwenImageEditConditioningLatents(
+            latents: MLXArray.ones([1, 4056, 64], dtype: .float32),
+            imageIDs: MLXArray.zeros([1, 4056, 3], dtype: .float32),
+            patchRows: 52,
+            patchColumns: 78)
+
+        let inputs = try QwenImageEditTransformerInputs(
+            targetLatents: target,
+            targetPatchRows: 52,
+            targetPatchColumns: 78,
+            conditioning: conditioning)
+
+        XCTAssertEqual(inputs.hiddenStates.shape, [1, 8112, 64])
+        XCTAssertEqual(inputs.targetLatentCount, 4056)
+        XCTAssertEqual(inputs.conditioningLatentCount, 4056)
+        XCTAssertEqual(inputs.imageShapes.map { [$0.frame, $0.height, $0.width] }, [[1, 52, 78], [1, 52, 78]])
+        XCTAssertEqual(inputs.targetVelocitySlice.shape, [1, 4056, 64])
+    }
+
     func testQwenEditRoPECombinesTargetAndConditioningImageGrids() {
         let ((imgCos, imgSin), (txtCos, txtSin)) = QwenRoPE.freqs(
             imageShapes: [
@@ -205,6 +226,21 @@ final class QwenImageEditSupportTests: XCTestCase {
         XCTAssertEqual(result.targetVelocity.shape, [1, 256, 64])
         XCTAssertEqual(result.targetLatentCount, 256)
         XCTAssertEqual(result.conditioningLatentCount, 4096)
+    }
+
+    func testQwenGuidanceRescalesGuidedNoiseToConditionalNorm() {
+        let positive = MLXArray([3, 4, 0, 0], [1, 2, 2]).asType(.float32)
+        let negative = MLXArray([0, 0, 1, 0], [1, 2, 2]).asType(.float32)
+
+        let guided = QwenGuidance.computeGuidedNoise(
+            positive: positive,
+            negative: negative,
+            guidance: 4)
+        let norms = sqrt(sum(guided * guided, axis: -1))
+            .asArray(Float.self)
+
+        XCTAssertEqual(norms[0], 5, accuracy: 0.001)
+        XCTAssertEqual(norms[1], 0, accuracy: 0.0001)
     }
 
     func testVAEInputUsesMinusOneToOneNCHWAtConditioningSize() throws {
@@ -250,7 +286,7 @@ final class QwenImageEditSupportTests: XCTestCase {
         XCTAssertEqual(Array(ids[0 ..< 9]), [1, 0, 0, 1, 0, 1, 1, 0, 2])
     }
 
-    func testQwenImageEditReadsSourceImageBeforeNotImplementedBoundary() async throws {
+    func testQwenImageEditReportsLoadFailureAsFailedEvent() async throws {
         let model = try makeTemporaryQwenImageEditBundle()
         let source = try makePNG(width: 1536, height: 1024)
         let outputDir = FileManager.default.temporaryDirectory
@@ -269,19 +305,19 @@ final class QwenImageEditSupportTests: XCTestCase {
             guidance: 4.0,
             outputDir: outputDir)
 
+        var failedMessage: String?
         do {
-            for try await _ in editor.edit(request) {}
-            XCTFail("expected Qwen edit notImplemented boundary")
-        } catch FluxError.notImplemented(let message) {
-            XCTAssertTrue(message.contains("preprocess output=1248x832"))
-            XCTAssertTrue(message.contains("vl=480x320"))
-            XCTAssertTrue(message.contains("vae=1248x832"))
-            XCTAssertTrue(message.contains("conditioning=52x78"))
-            XCTAssertTrue(message.contains("vision_patches="))
-            XCTAssertTrue(message.contains("vae_input="))
+            for try await event in editor.edit(request) {
+                if case .failed(let message, _) = event {
+                    failedMessage = message
+                }
+            }
         } catch {
-            XCTFail("wrong error: \(error)")
+            XCTFail("edit stream should report load/runtime errors as failed events, got throw: \(error)")
         }
+        let message = try XCTUnwrap(failedMessage)
+        XCTAssertFalse(message.contains("Qwen2.5-VL vision encoder"))
+        XCTAssertFalse(message.contains("notImplemented"))
     }
 
     private func makePNG(

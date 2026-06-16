@@ -309,6 +309,19 @@ enum QwenRoPE {
     }
 }
 
+enum QwenGuidance {
+    static func computeGuidedNoise(
+        positive: MLXArray,
+        negative: MLXArray,
+        guidance: Float
+    ) -> MLXArray {
+        let combined = negative + MLXArray(guidance) * (positive - negative)
+        let positiveNorm = sqrt(sum(positive * positive, axis: -1, keepDims: true) + MLXArray(Float(1e-12)))
+        let combinedNorm = sqrt(sum(combined * combined, axis: -1, keepDims: true) + MLXArray(Float(1e-12)))
+        return combined * (positiveNorm / combinedNorm)
+    }
+}
+
 final class QwenTimeEmbed {
     private let l1: MFluxLinear
     private let l2: MFluxLinear
@@ -817,7 +830,10 @@ final class QwenImagePipeline {
             let t = scheduler.sigmas[step]
             let np = transformer(latents: latents, promptEmbeds: promptEmbeds, timestep: t, latentH: latH, latentW: latW)
             let nn = transformer(latents: latents, promptEmbeds: negEmbeds, timestep: t, latentH: latH, latentW: latW)
-            let guided = nn + MLXArray(guidance) * (np - nn)
+            let guided = QwenGuidance.computeGuidedNoise(
+                positive: np,
+                negative: nn,
+                guidance: guidance)
             latents = scheduler.step(latent: latents, velocity: guided, stepIndex: step)
             eval(latents)
             if step == 0 { QwenImagePipeline.dbg("step0", latents) }

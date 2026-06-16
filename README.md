@@ -135,31 +135,29 @@ for try await event in engine.generate(request) {
   stage diagnostics + same-seed SHA determinism + prompt sensitivity + viewed
   coherent apple/mountain images.
 - `qwen-image` 4-bit: live load + 20-step CFG generation + same-seed SHA
-  determinism + prompt sensitivity, but the visual row is only `PARTIAL` until a
-  stronger prompt-accuracy proof is captured.
+  determinism + prompt sensitivity + viewed coherent apple/mountain images after
+  the mflux guidance-rescale fix. Proof artifact:
+  `docs/local/vmlx-flux-probes/2026-06-16-qwen-image-q4-guidance-proof/`.
 - `qwen-image-edit` q4: local scan + manifest-gated engine load passed against
-  the staged nested bundle. A live edit request with a real source PNG now
-  reaches the mflux-compatible preprocess contract (`output`, VL image size, VAE
-  conditioning size, conditioning patch grid, Qwen-VL normalized patch tensor,
-  and VAE image-input tensor) before stopping at the typed
-  `FluxError.notImplemented` body. Current live artifact records
-  `vision_patches=784x1176`, `vision_grid=1x28x28`, and
-  `vae_input=1x3x1024x1024`. Separate q4 probes now prove mflux edit
+  the staged nested bundle. Separate q4 probes prove mflux edit
   prompt-token expansion (`input_ids_shape=1x276`, `image_token_count=196`,
   `template_drop_index=64`), Qwen2.5-VL prompt-image encoding
   (`feature_shape=196x3584`, `prompt_embeds_shape=1x212x3584`, finite stats),
   source-image VAE conditioning
   (`latents_shape=1x4096x64`, `image_ids_shape=1x4096x3`, finite stats), and the
   first edit-shaped transformer velocity forward (`combined_velocity_shape=1x4352x64`,
-  `target_velocity_shape=1x256x64`, finite stats). This is still `PARTIAL`; no
-  edited image is generated yet.
+  `target_velocity_shape=1x256x64`, finite stats). The `ImageEditor` body now
+  runs scheduler+decode and writes q4 PNGs, but viewed 256px/512px edit outputs
+  are noise-like. This is still `PARTIAL`; coherent edited-image proof is
+  missing.
 
 `vmlxflux-probe` is the scan/load/generate verification CLI. Run live probes from
 `/Users/eric/vmlx-swift` or another directory containing `default.metallib`; the
 standalone checkout does not currently include that Metal library.
 
-**Still not implemented:** `qwen-image-edit`, flux1 edit/dev variants,
-`flux2-klein`, `fibo`, `seedvr2`, and `wan-2.x`. `Qwen-Image-Edit-mflux` staged
+**Still not implemented:** flux1 edit/dev variants, `flux2-klein`, `fibo`,
+`seedvr2`, and `wan-2.x`. `qwen-image-edit` has a native partial implementation
+but fails visual quality proof. `Qwen-Image-Edit-mflux` staged
 weights are nested quant variants; the local store lists `Qwen-Image-Edit-mflux-q3`,
 `-q4`, `-q5`, and incomplete `-q6`; q4 now has load-only proof at
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-manifest-load/` and
@@ -172,8 +170,14 @@ VL encode proof at
 VAE-conditioning proof at
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-conditioning-live/`, plus
 first transformer velocity proof at
-`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-denoise-live/`. Their
-remaining ports need:
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-denoise-live/`, plus
+edit-loop PNG plumbing proof at
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-edit-4step-guidance-live/`
+and
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-edit-512-4step-live/`.
+Current status metadata proof is at
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-partial-status-live/`. The
+remaining unimplemented/scaffolded models need:
 
 1. **FluxTransformer** (Dual-encoder Flux1 + single-encoder Flux2, DiT)
 2. **T5-XXL text encoder** (shared across Flux + Qwen + Wan)
