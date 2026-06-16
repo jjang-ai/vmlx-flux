@@ -531,6 +531,14 @@ Mirror the documented `FluxBackend` pattern (the bridge lives on the osaurus
 
 ## 10. Probe tool (verification harness)
 
+Use `scripts/vmlx-image-current-proof.sh` to refresh the current source-side
+load/generation proof set in one run. It builds `vmlxflux-probe`, runs the
+load-only matrix plus z-image-turbo 4/8-bit, flux-schnell 4/8-bit,
+qwen-image 4/8-bit, qwen-image-edit q4/q8, and staged Ideogram fp8/NF4
+same-seed proof rows, writes repo-local ignored proof artifacts, and fails if
+a row does not complete or the SHA repeat/sensitivity checks fail. The script
+does not replace visual inspection or Osaurus HTTP/UI proof.
+
 `vmlxflux-probe` (built: `swift build --product vmlxflux-probe`):
 ```
 vmlxflux-probe --root <dir> --model <name|dir> --generate --json \

@@ -15,6 +15,7 @@
     "integration_spec": "OSAURUS_VMLX_FLUX_INTEGRATION_SPEC.md",
     "api_spec": "OSAURUS_IMAGE_API_SPEC.md",
     "openapi_spec": "OSAURUS_IMAGE_OPENAPI.json",
+    "current_proof_runner": "scripts/vmlx-image-current-proof.sh",
     "contract_verifier": "scripts/vmlx-image-openapi-manifest-check.sh"
   },
   "runtime_evidence": {

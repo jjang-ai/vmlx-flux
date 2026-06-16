@@ -65,9 +65,10 @@ contract osaurus implements server-side and the UI builds against.
 > Machine-readable companion for UI/server wiring:
 > `OSAURUS_IMAGE_UI_MANIFEST.json`. HTTP/OpenAPI companion:
 > `OSAURUS_IMAGE_OPENAPI.json`. Contract drift check:
-> `scripts/vmlx-image-openapi-manifest-check.sh`. Treat the JSON manifest as
-> the current dropdown/control/exposure/proof source; treat the OpenAPI file as
-> the route/schema target; this prose spec explains field semantics.
+> `scripts/vmlx-image-openapi-manifest-check.sh`. Current source-side proof
+> refresh runner: `scripts/vmlx-image-current-proof.sh`. Treat the JSON manifest
+> as the current dropdown/control/exposure/proof source; treat the OpenAPI file
+> as the route/schema target; this prose spec explains field semantics.
 
 ---
 
