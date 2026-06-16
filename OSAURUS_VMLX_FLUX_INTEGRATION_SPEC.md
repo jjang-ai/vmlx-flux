@@ -391,7 +391,7 @@ text-image edit rows after the VL-grid conditioning fix; q3/q6 remain hidden
 until local bundles are complete. Qwen masks remain unsupported unless upstream
 mflux adds a real qwen mask path or a separate fill/inpaint model is wired.
 
-Current-main refresh after PR #67: `vmlx-origin/main`
+Previous current-main refresh after PR #67: `vmlx-origin/main`
 `9f1faea11aee78f17041c5bed6da039e70c11d05` was rebuilt and live-probed from
 `/Users/eric/vmlx-swift-fluxwt`. `swift test --filter vMLXFluxTests` passed 48
 tests with 0 failures. Fresh artifacts:
@@ -563,7 +563,7 @@ seeds, and the CFG path. z-image-turbo is **production-compatible** — the May-
    q3/q6 hidden/blocked until the local bundles are complete. Keep qwen mask
    controls hidden unless upstream mflux adds a real qwen mask path or a
    separate fill/inpaint model is wired; do not fake masks with post-blends.
-4. Full-precision z-image/flux-schnell: stage weights, run the same current-main
-   probe matrix, and visually inspect outputs before promotion.
+4. Full-precision z-image/flux-schnell: stage weights, run the same proof
+   matrix pattern, and visually inspect outputs before promotion.
 5. LoRA loader hook (`supportsLoRA`), img2img/controlnet conditioning.
 6. `numImages > 1` batching; webp/jpeg writers; preview-decode cadence.

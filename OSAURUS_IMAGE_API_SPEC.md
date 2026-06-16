@@ -35,7 +35,7 @@ contract osaurus implements server-side and the UI builds against.
 > and clean object-icon proof; official `ideogram-ai/*` downloads still require
 > approval for the current account (`hf download ... --dry-run` returned access
 > denied for both fp8 and nf4 on 2026-06-16), and nf4 is not staged/proven.
-> Multi-image qwen-edit proof: current main includes ordered
+> Multi-image qwen-edit proof: vMLX source includes ordered
 > `ImageEditRequest.sourceImages`. q4 artifact:
 > `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-multi-image-live/Qwen-Image-Edit-mflux-q4-load.json`;
 > q5 artifact:
