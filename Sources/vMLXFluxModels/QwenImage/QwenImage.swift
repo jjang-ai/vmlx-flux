@@ -93,8 +93,26 @@ public final class QwenImageEdit: ImageEditor, @unchecked Sendable {
 
     public func edit(_ request: ImageEditRequest) -> AsyncThrowingStream<ImageGenEvent, Error> {
         AsyncThrowingStream { continuation in
-            continuation.finish(throwing: FluxError.notImplemented(
-                "QwenImageEdit.edit — port from mflux/models/qwen/variants/edit/qwen_image_edit.py"))
+            do {
+                let plan = try QwenImageEditPreprocessPlan(
+                    sourceImage: request.sourceImage,
+                    requestedWidth: request.width,
+                    requestedHeight: request.height,
+                    steps: request.steps,
+                    guidance: request.guidance)
+                _ = try QwenImageEditPreprocessPlan.imageIDs(
+                    height: plan.vaeHeight,
+                    width: plan.vaeWidth)
+                continuation.finish(throwing: FluxError.notImplemented(
+                    "QwenImageEdit.edit — Qwen2.5-VL vision encoder, VAE image encode, "
+                    + "conditioning latent concat, and denoise loop are still missing; "
+                    + "preprocess output=\(plan.outputWidth)x\(plan.outputHeight) "
+                    + "vl=\(plan.vlWidth)x\(plan.vlHeight) "
+                    + "vae=\(plan.vaeWidth)x\(plan.vaeHeight) "
+                    + "conditioning=\(plan.conditioningPatchRows)x\(plan.conditioningPatchColumns)"))
+            } catch {
+                continuation.finish(throwing: error)
+            }
         }
     }
 }

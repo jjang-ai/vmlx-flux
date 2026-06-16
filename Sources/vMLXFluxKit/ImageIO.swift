@@ -17,6 +17,21 @@ import CoreImage
 
 public enum ImageIO {
 
+    public static func dimensions(of url: URL) throws -> (width: Int, height: Int) {
+        #if canImport(AppKit)
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int
+        else {
+            throw FluxError.invalidRequest("failed to read image dimensions at \(url.path)")
+        }
+        return (width, height)
+        #else
+        throw FluxError.notImplemented("ImageIO.dimensions requires AppKit")
+        #endif
+    }
+
     /// Save an image tensor to `dir/<prefix>-<uuid>.png`.
     /// Returns the URL of the written file.
     @MainActor

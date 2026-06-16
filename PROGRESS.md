@@ -34,12 +34,24 @@
   `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-manifest-load/Qwen-Image-Edit-mflux-q4-load.json`
   with `load_status=loaded`, `canonical=qwen-image-edit`, `kind=imageEdit`,
   `quant=4`, and `generate_requested=false`.
+- **Qwen-Image-Edit preprocess boundary:** added the mflux-compatible edit
+  preprocess plan: source-image dimensions, output dimensions, VL conditioning
+  image dimensions, VAE conditioning dimensions, and Qwen image IDs. Added probe
+  `--edit --source-image`; live q4 run loaded the real staged bundle and sent a
+  real source PNG through `QwenImageEdit.edit` before the typed missing-body
+  error. Artifact:
+  `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-preprocess-live/Qwen-Image-Edit-mflux-q4-load.json`
+  with `edit_requested=true`, turn status `threw`, and error text containing
+  `preprocess output=1024x1024 vl=384x384 vae=1024x1024 conditioning=64x64`.
 - **Qwen-Edit guardrail tests:** red test first caught the previous fake load
   (`QwenImageEdit` accepted a bundle missing vision tower keys). After the
   validator landed,
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter vMLXFluxTests.RegistryTests/testQwenImageEdit`
-  passed 3 tests and full `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test`
-  passed 23 tests.
+  passed 3 tests. The new
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter vMLXFluxTests.QwenImageEditSupportTests`
+  preprocess/edit-boundary suite passed 6 tests; full
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` passed
+  29 tests.
 - **Probe metadata fixed:** scan JSON now reports `native_pipeline_implemented`
   for `z-image-turbo`, `flux1-schnell`, and `qwen-image`; `qwen-image-edit`
   remains `not_implemented` with blockers for the missing Qwen2.5-VL vision

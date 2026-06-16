@@ -144,9 +144,13 @@ struct VMLXFluxProbe {
             "model": modelJSON(local),
             "started_at": isoTimestamp(startedAt),
             "generate_requested": options.generate,
+            "edit_requested": options.edit,
             "turns": options.turns,
             "width": options.width,
             "height": options.height,
+            "width_explicit": options.widthExplicit,
+            "height_explicit": options.heightExplicit,
+            "source_image": options.sourceImage?.path ?? NSNull(),
             "steps": options.steps,
             "seed": options.seed.map { $0 as Any } ?? NSNull(),
         ]
@@ -222,6 +226,77 @@ struct VMLXFluxProbe {
                     turnRecords.append(record)
                 }
                 payload["generation_turns"] = turnRecords
+            }
+
+            if options.edit {
+                guard let sourceImage = options.sourceImage else {
+                    throw ProbeError("--edit requires --source-image")
+                }
+                var turnRecords: [[String: Any]] = []
+                for (index, prompt) in options.turns.enumerated() {
+                    let request = ImageEditRequest(
+                        prompt: prompt,
+                        sourceImage: sourceImage,
+                        mask: nil,
+                        strength: options.strength,
+                        width: options.widthExplicit ? options.width : nil,
+                        height: options.heightExplicit ? options.height : nil,
+                        steps: options.steps,
+                        guidance: options.guidance ?? 4.0,
+                        seed: options.seed ?? UInt64(index + 1),
+                        outputDir: options.outputDirectory)
+                    let turnStart = Date()
+                    var record: [String: Any] = [
+                        "turn": index + 1,
+                        "prompt": prompt,
+                        "source_image": sourceImage.path,
+                        "started_at": isoTimestamp(turnStart),
+                    ]
+                    do {
+                        let stream = await engine.edit(request)
+                        var steps: [[String: Any]] = []
+                        var completedURL: String?
+                        for try await event in stream {
+                            switch event {
+                            case .step(let step, let total, let eta):
+                                steps.append([
+                                    "step": step,
+                                    "total": total,
+                                    "eta_seconds": eta.map { $0 as Any } ?? NSNull(),
+                                ])
+                            case .preview(let data, let step):
+                                steps.append([
+                                    "preview_step": step,
+                                    "preview_bytes": data.count,
+                                ])
+                            case .completed(let url, let seed):
+                                completedURL = url.path
+                                record["seed"] = seed
+                            case .failed(let message, let hfAuth):
+                                record["status"] = "failed_event"
+                                record["message"] = message
+                                record["hf_auth"] = hfAuth
+                            case .cancelled:
+                                record["status"] = "cancelled"
+                            }
+                        }
+                        record["steps"] = steps
+                        if let completedURL {
+                            record["status"] = "completed"
+                            record["output"] = completedURL
+                            record["image_diagnostics"] = imageDiagnostics(
+                                for: URL(fileURLWithPath: completedURL))
+                        } else if record["status"] == nil {
+                            record["status"] = "no_completed_event"
+                        }
+                    } catch {
+                        record["status"] = "threw"
+                        record["error"] = String(describing: error)
+                    }
+                    record["elapsed_seconds"] = Date().timeIntervalSince(turnStart)
+                    turnRecords.append(record)
+                }
+                payload["edit_turns"] = turnRecords
             }
         } catch {
             payload["load_status"] = "failed"
@@ -438,13 +513,18 @@ struct ProbeOptions {
     var matrix = false
     var load = false
     var generate = false
+    var edit = false
     var json = false
     var width = 256
     var height = 256
+    var widthExplicit = false
+    var heightExplicit = false
     var steps = 1
     var seed: UInt64?
     var guidance: Float?
     var negativePrompt: String?
+    var sourceImage: URL?
+    var strength: Float = 0.75
     var turns = Self.defaultTurns
 
     init(arguments: [String]) throws {
@@ -469,6 +549,9 @@ struct ProbeOptions {
             case "--generate":
                 generate = true
                 load = true
+            case "--edit":
+                edit = true
+                load = true
             case "--no-generate":
                 generate = false
             case "--json":
@@ -477,10 +560,12 @@ struct ProbeOptions {
                 let value = try Self.value(after: arg, in: arguments, index: &index)
                 guard let parsed = Int(value) else { throw ProbeError("invalid --width") }
                 width = parsed
+                widthExplicit = true
             case "--height":
                 let value = try Self.value(after: arg, in: arguments, index: &index)
                 guard let parsed = Int(value) else { throw ProbeError("invalid --height") }
                 height = parsed
+                heightExplicit = true
             case "--steps":
                 let value = try Self.value(after: arg, in: arguments, index: &index)
                 guard let parsed = Int(value) else { throw ProbeError("invalid --steps") }
@@ -495,6 +580,12 @@ struct ProbeOptions {
                 guidance = parsed
             case "--negative":
                 negativePrompt = try Self.value(after: arg, in: arguments, index: &index)
+            case "--source-image":
+                sourceImage = URL(fileURLWithPath: try Self.value(after: arg, in: arguments, index: &index))
+            case "--strength":
+                let value = try Self.value(after: arg, in: arguments, index: &index)
+                guard let parsed = Float(value) else { throw ProbeError("invalid --strength") }
+                strength = parsed
             case "--turn":
                 let turn = try Self.value(after: arg, in: arguments, index: &index)
                 if turns == Self.defaultTurns {

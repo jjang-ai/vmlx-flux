@@ -138,8 +138,11 @@ for try await event in engine.generate(request) {
   determinism + prompt sensitivity, but the visual row is only `PARTIAL` until a
   stronger prompt-accuracy proof is captured.
 - `qwen-image-edit` q4: local scan + manifest-gated engine load passed against
-  the staged nested bundle. This is load-only `PARTIAL` proof; image editing is
-  still blocked because `QwenImageEdit.edit` throws `FluxError.notImplemented`.
+  the staged nested bundle. A live edit request with a real source PNG now
+  reaches the mflux-compatible preprocess contract (`output`, VL image size, VAE
+  conditioning size, conditioning patch grid) before stopping at the typed
+  `FluxError.notImplemented` body. This is still `PARTIAL`; no edited image is
+  generated yet.
 
 `vmlxflux-probe` is the scan/load/generate verification CLI. Run live probes from
 `/Users/eric/vmlx-swift` or another directory containing `default.metallib`; the
@@ -149,7 +152,9 @@ standalone checkout does not currently include that Metal library.
 `flux2-klein`, `fibo`, `seedvr2`, and `wan-2.x`. `Qwen-Image-Edit-mflux` staged
 weights are nested quant variants; the local store lists `Qwen-Image-Edit-mflux-q3`,
 `-q4`, `-q5`, and incomplete `-q6`; q4 now has load-only proof at
-`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-manifest-load/`. Their
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-manifest-load/` and
+edit-preprocess proof at
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-preprocess-live/`. Their
 remaining ports need:
 
 1. **FluxTransformer** (Dual-encoder Flux1 + single-encoder Flux2, DiT)

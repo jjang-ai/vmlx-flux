@@ -32,8 +32,8 @@
   live load + three-turn generate + SHA + visual proof from 2026-06-16.
   `qwen-image` 4-bit has fresh live load/generate/SHA proof, but the visual row
   is only `PARTIAL` for prompt fidelity. `qwen-image-edit` scans as local
-  q3/q4/q5 variants and q4 has manifest-gated load-only proof, but edit
-  generation still throws `notImplemented`. See §6 and §7b.
+  q3/q4/q5 variants and q4 has manifest-gated load plus edit-preprocess proof,
+  but edit generation still throws `notImplemented`. See §6 and §7b.
 
 ---
 
@@ -203,6 +203,8 @@ should present/request the exact local variant IDs:
 transformer and VAE shards. The first edit implementation/proof target should be
 `Qwen-Image-Edit-mflux-q4`; current q4 load-only artifact:
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-manifest-load/Qwen-Image-Edit-mflux-q4-load.json`.
+Current q4 edit-preprocess artifact:
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-preprocess-live/Qwen-Image-Edit-mflux-q4-load.json`.
 
 **mflux component layout** (what the WeightLoader expects):
 ```
@@ -229,7 +231,7 @@ their 4-bit linears through scale tensors at load time inside the model.
 |---|---|---|---|
 | **z-image-turbo** | `native_pipeline_implemented` | Full native port: Qwen-style text encoder, patchify+caption-concat DiT (noise/context refiners + unified layers, RoPE, adaLN, timestep embed), real `AutoencoderKL` VAE decode, real 4/8-bit weight decode, PNG out. Fresh 2026-06-16 proof: 4-bit + 8-bit live load, 3 completed turns, same-prompt SHA match, different-prompt SHA change, viewed coherent apple/mountain images. | 1024px tuning. |
 | **qwen-image** | `native_pipeline_implemented` / `PARTIAL` visual row | Full native pipeline `QwenImageNative.swift`: Qwen2.5 LM text encoder (GQA), 60-layer MM-DiT (joint attention + 3-axis RoPE), 3D causal-conv VAE, CFG. Fresh 2026-06-16 4-bit proof: live load, 20-step generation, same-prompt SHA match, different-prompt SHA change, viewed recognizable apple/mountain outputs. | Mark `PARTIAL` until a stronger prompt-accuracy visual row is captured; 8-bit/full + qwen-image-edit (vision tower) pending. Two port bugs fixed: VAE conv weights are MLX channels-last (not PyTorch); qwen timestep is raw sigma (QwenTimesteps applies ×1000 internally). |
-| qwen-image-edit | `not_implemented` / `PARTIAL` load-only row | Local q3/q4/q5 variants scan as loadable bundles after nested-quant scanner fix. `Qwen-Image-Edit-mflux-q4` passes manifest-gated engine load against tokenizer files, Qwen LM keys, Qwen-VL vision keys, transformer keys, and VAE encode/decode keys (`load_status=loaded`, `generate_requested=false`). | Qwen2.5-VL vision encoder implementation; VAE image encoder execution; conditioning latent concat; `edit` body; live image-edit proof. |
+| qwen-image-edit | `not_implemented` / `PARTIAL` preprocess row | Local q3/q4/q5 variants scan as loadable bundles after nested-quant scanner fix. `Qwen-Image-Edit-mflux-q4` passes manifest-gated engine load against tokenizer files, Qwen LM keys, Qwen-VL vision keys, transformer keys, and VAE encode/decode keys. A live edit request with a real source PNG reaches mflux-compatible preprocessing (`output=1024x1024`, `vl=384x384`, `vae=1024x1024`, `conditioning=64x64`) before throwing typed `notImplemented`. | Qwen2.5-VL vision encoder implementation; VAE image encoder execution; conditioning latent concat; denoise loop; live image-edit proof. |
 | flux2-klein / flux2-klein-edit | `not_implemented` | Bundle scans + loads; `FluxDiTConfig.flux2Klein` preset exists. | T5 (single-encoder) port + weight key-map + 3-axis RoPE. |
 | **flux1-schnell** | `native_pipeline_implemented` | Full native pipeline `Flux1Native.swift`: T5-XXL + CLIP-L encoders, full DiT (19 joint + 38 single blocks, 24h×128, 3-axis RoPE), AutoencoderKL VAE, mflux decode. Fresh 2026-06-16 proof: 4-bit + 8-bit live load, 3 completed turns, same-prompt SHA match, different-prompt SHA change, viewed coherent apple/mountain images. | tokenizer.json must be staged (mflux ships slow tokenizers — convert; see port plan). Full precision pending. |
 | flux1-dev/kontext/fill | `not_implemented` | dev = schnell + guidance embedder (small add); kontext/fill = edit variants. | wire guidance + edit conditioning on the working schnell pipeline. |
@@ -338,6 +340,12 @@ vmlxflux-probe --root <dir> --model <name|dir> --generate --json \
   --artifacts <dir> --output-dir <dir>
 # or --matrix to scan+load+gen across every local bundle and emit a
 # compatibility-matrix.{json,md}
+
+vmlxflux-probe --model Qwen-Image-Edit-mflux-q4 --edit \
+  --source-image <png> --turn "make the background blue" \
+  --artifacts <dir>
+# qwen-image-edit currently records a typed notImplemented after source-image
+# preprocessing; no edited image is produced yet.
 ```
 Per-turn seed = `--seed` if given (fixes ALL turns to one seed — use for
 same-seed/different-prompt sensitivity tests), else `turnIndex+1`. Artifacts:

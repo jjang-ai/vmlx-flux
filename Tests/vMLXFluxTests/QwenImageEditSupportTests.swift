@@ -1,0 +1,212 @@
+import XCTest
+import CoreGraphics
+import ImageIO
+@testable import vMLXFluxKit
+@testable import vMLXFluxModels
+
+final class QwenImageEditSupportTests: XCTestCase {
+
+    func testPreprocessPlanMatchesMFluxAspectRatioSizing() throws {
+        let plan = try QwenImageEditPreprocessPlan(
+            sourceWidth: 1536,
+            sourceHeight: 1024,
+            requestedWidth: nil,
+            requestedHeight: nil,
+            steps: 20,
+            guidance: 4.0)
+
+        XCTAssertEqual(plan.outputWidth, 1248)
+        XCTAssertEqual(plan.outputHeight, 832)
+        XCTAssertEqual(plan.vlWidth, 480)
+        XCTAssertEqual(plan.vlHeight, 320)
+        XCTAssertEqual(plan.vaeWidth, 1248)
+        XCTAssertEqual(plan.vaeHeight, 832)
+        XCTAssertEqual(plan.conditioningPatchRows, 52)
+        XCTAssertEqual(plan.conditioningPatchColumns, 78)
+    }
+
+    func testPreprocessPlanFloorsExplicitOutputDimensionsToVAEGrid() throws {
+        let plan = try QwenImageEditPreprocessPlan(
+            sourceWidth: 480,
+            sourceHeight: 640,
+            requestedWidth: 513,
+            requestedHeight: 1025,
+            steps: 4,
+            guidance: 3.0)
+
+        XCTAssertEqual(plan.outputWidth, 512)
+        XCTAssertEqual(plan.outputHeight, 1024)
+        XCTAssertEqual(plan.vlWidth, 320)
+        XCTAssertEqual(plan.vlHeight, 448)
+        XCTAssertEqual(plan.vaeWidth, 896)
+        XCTAssertEqual(plan.vaeHeight, 1184)
+    }
+
+    func testImageIdsUseOneInFirstAxisAndRowColumnPatchCoordinates() throws {
+        let ids = try QwenImageEditPreprocessPlan.imageIDs(height: 32, width: 48)
+
+        XCTAssertEqual(ids.count, 6)
+        XCTAssertEqual(ids[0], [1, 0, 0])
+        XCTAssertEqual(ids[1], [1, 0, 1])
+        XCTAssertEqual(ids[2], [1, 0, 2])
+        XCTAssertEqual(ids[3], [1, 1, 0])
+        XCTAssertEqual(ids[4], [1, 1, 1])
+        XCTAssertEqual(ids[5], [1, 1, 2])
+    }
+
+    func testPreprocessPlanRejectsInvalidDimensions() {
+        XCTAssertThrowsError(try QwenImageEditPreprocessPlan(
+            sourceWidth: 0,
+            sourceHeight: 1024,
+            requestedWidth: nil,
+            requestedHeight: nil,
+            steps: 20,
+            guidance: 4.0))
+
+        XCTAssertThrowsError(try QwenImageEditPreprocessPlan.imageIDs(height: 31, width: 48))
+    }
+
+    func testPreprocessPlanReadsSourceImageDimensions() throws {
+        let source = try makePNG(width: 1536, height: 1024)
+
+        let plan = try QwenImageEditPreprocessPlan(
+            sourceImage: source,
+            requestedWidth: nil,
+            requestedHeight: nil,
+            steps: 20,
+            guidance: 4.0)
+
+        XCTAssertEqual(plan.outputWidth, 1248)
+        XCTAssertEqual(plan.outputHeight, 832)
+        XCTAssertEqual(plan.vlWidth, 480)
+        XCTAssertEqual(plan.vlHeight, 320)
+    }
+
+    func testQwenImageEditReadsSourceImageBeforeNotImplementedBoundary() async throws {
+        let model = try makeTemporaryQwenImageEditBundle()
+        let source = try makePNG(width: 1536, height: 1024)
+        let outputDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qwen-edit-output-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: outputDir)
+        }
+
+        let editor = try QwenImageEdit(modelPath: model, quantize: 4)
+        let request = ImageEditRequest(
+            prompt: "make the background blue",
+            sourceImage: source,
+            width: nil,
+            height: nil,
+            steps: 20,
+            guidance: 4.0,
+            outputDir: outputDir)
+
+        do {
+            for try await _ in editor.edit(request) {}
+            XCTFail("expected Qwen edit notImplemented boundary")
+        } catch FluxError.notImplemented(let message) {
+            XCTAssertTrue(message.contains("preprocess output=1248x832"))
+            XCTAssertTrue(message.contains("vl=480x320"))
+            XCTAssertTrue(message.contains("vae=1248x832"))
+            XCTAssertTrue(message.contains("conditioning=52x78"))
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+    }
+
+    private func makePNG(width: Int, height: Int) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qwen-edit-source-\(UUID().uuidString).png")
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: url)
+        }
+        let bytesPerRow = width * 4
+        let pixels = [UInt8](repeating: 255, count: height * bytesPerRow)
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData),
+              let image = CGImage(
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bitsPerPixel: 32,
+                bytesPerRow: bytesPerRow,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: false,
+                intent: .defaultIntent),
+              let destination = CGImageDestinationCreateWithURL(
+                url as CFURL,
+                "public.png" as CFString,
+                1,
+                nil)
+        else {
+            throw NSError(domain: "QwenImageEditSupportTests", code: 1)
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            throw NSError(domain: "QwenImageEditSupportTests", code: 2)
+        }
+        return url
+    }
+
+    private func makeTemporaryQwenImageEditBundle() throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qwen-edit-bundle-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: root)
+        }
+        let model = root.appendingPathComponent("Qwen-Image-Edit-mflux-q4", isDirectory: true)
+        let fm = FileManager.default
+        for component in ["tokenizer", "text_encoder", "transformer", "vae"] {
+            try fm.createDirectory(
+                at: model.appendingPathComponent(component, isDirectory: true),
+                withIntermediateDirectories: true)
+        }
+        try Data("{}".utf8).write(to: model.appendingPathComponent("tokenizer/tokenizer.json"))
+        try Data("{}".utf8).write(to: model.appendingPathComponent("tokenizer/tokenizer_config.json"))
+        try writeWeightIndex(
+            keys: [
+                "encoder.embed_tokens.weight",
+                "encoder.layers.0.self_attn.q_proj.weight",
+                "encoder.norm.weight",
+                "encoder.visual.patch_embed.proj.weight",
+                "encoder.visual.blocks.0.attn.qkv.weight",
+                "encoder.visual.blocks.31.attn.qkv.weight",
+                "encoder.visual.merger.mlp_1.weight",
+            ],
+            to: model.appendingPathComponent("text_encoder/model.safetensors.index.json"))
+        try writeWeightIndex(
+            keys: [
+                "img_in.weight",
+                "txt_in.weight",
+                "time_text_embed.timestep_embedder.linear_1.weight",
+                "transformer_blocks.0.attn.add_q_proj.weight",
+                "transformer_blocks.59.img_ff.mlp_out.weight",
+                "proj_out.weight",
+            ],
+            to: model.appendingPathComponent("transformer/model.safetensors.index.json"))
+        try writeWeightIndex(
+            keys: [
+                "encoder.conv_in.conv3d.weight",
+                "encoder.down_blocks.0.resnets.0.conv1.conv3d.weight",
+                "quant_conv.conv3d.weight",
+                "post_quant_conv.conv3d.weight",
+                "decoder.conv_in.conv3d.weight",
+                "decoder.conv_out.conv3d.weight",
+            ],
+            to: model.appendingPathComponent("vae/model.safetensors.index.json"))
+        return model
+    }
+
+    private func writeWeightIndex(keys: [String], to url: URL) throws {
+        let weightMap = Dictionary(uniqueKeysWithValues: keys.map { ($0, "0.safetensors") })
+        let object: [String: Any] = ["weight_map": weightMap]
+        let data = try JSONSerialization.data(
+            withJSONObject: object,
+            options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: url)
+        try Data([0]).write(
+            to: url.deletingLastPathComponent().appendingPathComponent("0.safetensors"))
+    }
+}
