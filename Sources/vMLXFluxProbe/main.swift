@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import ImageIO
+@preconcurrency import MLX
 import vMLXFlux
 import vMLXFluxKit
 
@@ -145,6 +146,7 @@ struct VMLXFluxProbe {
             "started_at": isoTimestamp(startedAt),
             "generate_requested": options.generate,
             "edit_requested": options.edit,
+            "qwen_edit_conditioning_requested": options.qwenEditConditioning,
             "turns": options.turns,
             "width": options.width,
             "height": options.height,
@@ -298,6 +300,40 @@ struct VMLXFluxProbe {
                 }
                 payload["edit_turns"] = turnRecords
             }
+
+            if options.qwenEditConditioning {
+                guard let sourceImage = options.sourceImage else {
+                    throw ProbeError("--qwen-edit-conditioning requires --source-image")
+                }
+                guard local.canonicalName == "qwen-image-edit" else {
+                    throw ProbeError("--qwen-edit-conditioning requires a qwen-image-edit model")
+                }
+                let plan = try QwenImageEditPreprocessPlan(
+                    sourceImage: sourceImage,
+                    requestedWidth: options.widthExplicit ? options.width : nil,
+                    requestedHeight: options.heightExplicit ? options.height : nil,
+                    steps: options.steps,
+                    guidance: options.guidance ?? 4.0)
+                let conditioningStart = Date()
+                let conditioning = try QwenImageEditConditioner.encode(
+                    modelPath: local.directory,
+                    sourceImage: sourceImage,
+                    plan: plan)
+                payload["qwen_edit_conditioning"] = [
+                    "status": "encoded",
+                    "elapsed_seconds": Date().timeIntervalSince(conditioningStart),
+                    "output_width": plan.outputWidth,
+                    "output_height": plan.outputHeight,
+                    "vae_width": plan.vaeWidth,
+                    "vae_height": plan.vaeHeight,
+                    "patch_rows": conditioning.patchRows,
+                    "patch_columns": conditioning.patchColumns,
+                    "latents_shape": conditioning.latents.shape,
+                    "image_ids_shape": conditioning.imageIDs.shape,
+                    "latents_stats": mlxStats(conditioning.latents),
+                    "image_ids_stats": mlxStats(conditioning.imageIDs),
+                ]
+            }
         } catch {
             payload["load_status"] = "failed"
             payload["error"] = String(describing: error)
@@ -446,7 +482,7 @@ struct VMLXFluxProbe {
             return [
                 "model edit body throws FluxError.notImplemented",
                 "Qwen2.5-VL vision encoder implementation is missing",
-                "VAE image encode and conditioning latent concat path is missing",
+                "conditioning latent concat and denoise loop are missing from the ImageEditor body",
                 "live image-edit proof is missing",
             ]
         case "flux1-dev", "flux1-kontext", "flux1-fill",
@@ -490,6 +526,21 @@ struct VMLXFluxProbe {
         }
     }
 
+    private static func mlxStats(_ array: MLXArray) -> [String: Any] {
+        eval(array)
+        let f = array.asType(.float32)
+        let meanValue = mean(f).item(Float.self)
+        let maxValue = MLX.max(f).item(Float.self)
+        let minValue = (-MLX.max(-f)).item(Float.self)
+        return [
+            "shape": array.shape,
+            "mean": meanValue,
+            "min": minValue,
+            "max": maxValue,
+            "finite": meanValue.isFinite && minValue.isFinite && maxValue.isFinite,
+        ]
+    }
+
     private static func isoTimestamp(_ date: Date = Date()) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -514,6 +565,7 @@ struct ProbeOptions {
     var load = false
     var generate = false
     var edit = false
+    var qwenEditConditioning = false
     var json = false
     var width = 256
     var height = 256
@@ -551,6 +603,9 @@ struct ProbeOptions {
                 load = true
             case "--edit":
                 edit = true
+                load = true
+            case "--qwen-edit-conditioning":
+                qwenEditConditioning = true
                 load = true
             case "--no-generate":
                 generate = false

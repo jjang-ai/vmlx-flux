@@ -511,9 +511,23 @@ private final class QVResample {
         conv = try QVConv1x1OrSpatial(store: store, prefix: "\(prefix).resample_conv")
     }
     func callAsFunction(_ x: MLXArray) -> MLXArray {
-        // spatial nearest 2x then conv (halves channels).
-        let up = repeated(repeated(x, count: 2, axis: 2), count: 2, axis: 3)
-        return conv(up)
+        switch mode {
+        case "upsample2d", "upsample3d", "up":
+            // mflux's 3D upsample path reshapes T into batch, nearest-2x spatially,
+            // then applies the 2D resample_conv. At T=1 this is pure NCHW 2D.
+            let up = repeated(repeated(x, count: 2, axis: 2), count: 2, axis: 3)
+            return conv(up)
+        case "downsample2d", "downsample3d", "down":
+            // mflux pads bottom/right by one pixel before stride-2 resample_conv.
+            let b = x.dim(0), c = x.dim(1), h = x.dim(2), w = x.dim(3)
+            let right = MLXArray.zeros([b, c, h, 1], dtype: x.dtype)
+            var padded = concatenated([x, right], axis: 3)
+            let bottom = MLXArray.zeros([b, c, 1, w + 1], dtype: x.dtype)
+            padded = concatenated([padded, bottom], axis: 2)
+            return conv(padded, stride: 2, padding: 0)
+        default:
+            preconditionFailure("unsupported Qwen VAE resample mode \(mode)")
+        }
     }
 }
 
@@ -526,9 +540,9 @@ private final class QVConv1x1OrSpatial {
         self.weight = w
         self.bias = store.optionalTensor("vae", "\(prefix).bias")
     }
-    func callAsFunction(_ x: MLXArray) -> MLXArray {
-        let pad = weight.dim(1) / 2
-        var y = conv2d(x.transposed(0, 2, 3, 1), weight, stride: IntOrPair(1), padding: IntOrPair(pad))
+    func callAsFunction(_ x: MLXArray, stride: Int = 1, padding: Int? = nil) -> MLXArray {
+        let pad = padding ?? (weight.dim(1) / 2)
+        var y = conv2d(x.transposed(0, 2, 3, 1), weight, stride: IntOrPair(stride), padding: IntOrPair(pad))
         if let bias { y = y + bias }
         return y.transposed(0, 3, 1, 2)
     }
@@ -554,10 +568,71 @@ private final class QVUpBlock {
     }
 }
 
-final class Qwen3DVAEDecoder {
-    private static let mean: [Float] = [-0.7571, -0.7089, -0.9113, 0.1075, -0.1745, 0.9653, -0.1517, 1.5508, 0.4134, -0.0715, 0.5517, -0.3632, -0.1922, -0.9497, 0.2503, -0.2921]
-    private static let std: [Float] = [2.8184, 1.4541, 2.3275, 2.6558, 1.2196, 1.7708, 2.6052, 2.0743, 3.2687, 2.1526, 2.8652, 1.5579, 1.6382, 1.1253, 2.8251, 1.916]
+private final class QVDownBlock {
+    private let resnets: [QVResBlock]
+    private let resample: QVResample?
+    init(store: MFluxStore, index: Int, numRes: Int, downsampleMode: String?) throws {
+        var rs: [QVResBlock] = []
+        for l in 0 ..< numRes {
+            rs.append(try QVResBlock(store: store, prefix: "encoder.down_blocks.\(index).resnets.\(l)"))
+        }
+        resnets = rs
+        resample = try downsampleMode.map {
+            try QVResample(store: store, prefix: "encoder.down_blocks.\(index).downsamplers.0", mode: $0)
+        }
+    }
+    func callAsFunction(_ x: MLXArray) -> MLXArray {
+        var h = x
+        for r in resnets { h = r(h) }
+        if let resample { h = resample(h) }
+        return h
+    }
+}
 
+private enum Qwen3DVAEStats {
+    static let mean: [Float] = [-0.7571, -0.7089, -0.9113, 0.1075, -0.1745, 0.9653, -0.1517, 1.5508, 0.4134, -0.0715, 0.5517, -0.3632, -0.1922, -0.9497, 0.2503, -0.2921]
+    static let std: [Float] = [2.8184, 1.4541, 2.3275, 2.6558, 1.2196, 1.7708, 2.6052, 2.0743, 3.2687, 2.1526, 2.8652, 1.5579, 1.6382, 1.1253, 2.8251, 1.916]
+}
+
+final class Qwen3DVAEEncoder {
+    private let convIn: QVConv
+    private let down: [QVDownBlock]
+    private let midRes0: QVResBlock, midAttn: QVAttn, midRes1: QVResBlock
+    private let normOut: MLXArray
+    private let convOut: QVConv
+    private let quant: QVConv
+
+    init(store: MFluxStore) throws {
+        convIn = try QVConv(store: store, prefix: "encoder.conv_in.conv3d", padding: 1)
+        down = [
+            try QVDownBlock(store: store, index: 0, numRes: 2, downsampleMode: "downsample2d"),
+            try QVDownBlock(store: store, index: 1, numRes: 2, downsampleMode: "downsample2d"),
+            try QVDownBlock(store: store, index: 2, numRes: 2, downsampleMode: "downsample3d"),
+            try QVDownBlock(store: store, index: 3, numRes: 2, downsampleMode: nil),
+        ]
+        midRes0 = try QVResBlock(store: store, prefix: "encoder.mid_block.resnets.0")
+        midAttn = try QVAttn(store: store, prefix: "encoder.mid_block.attentions.0")
+        midRes1 = try QVResBlock(store: store, prefix: "encoder.mid_block.resnets.1")
+        normOut = try store.tensor("vae", "encoder.norm_out.weight")
+        convOut = try QVConv(store: store, prefix: "encoder.conv_out.conv3d", padding: 1)
+        quant = try QVConv(store: store, prefix: "quant_conv.conv3d", padding: 0)
+    }
+
+    /// image (1, 3, H, W) in [-1,1] NCHW -> normalized latents (1, 16, H/8, W/8).
+    func encode(_ image: MLXArray) -> MLXArray {
+        var h = convIn(image)
+        for d in down { h = d(h) }
+        h = midRes1(midAttn(midRes0(h)))
+        h = convOut(silu(qvL2Norm(h, weight: normOut)))
+        h = quant(h)
+        h = h[0..., 0 ..< 16, 0..., 0...]
+        let meanA = MLXArray(Qwen3DVAEStats.mean, [1, 16, 1, 1])
+        let stdA = MLXArray(Qwen3DVAEStats.std, [1, 16, 1, 1])
+        return (h - meanA) / stdA
+    }
+}
+
+final class Qwen3DVAEDecoder {
     private let postQuant: QVConv
     private let convIn: QVConv
     private let midRes0: QVResBlock, midAttn: QVAttn, midRes1: QVResBlock
@@ -583,8 +658,8 @@ final class Qwen3DVAEDecoder {
 
     /// latents (1, 16, h/8, w/8) NCHW → image (1, 3, H, W) in [0,1].
     func decode(_ latents: MLXArray) -> MLXArray {
-        let meanA = MLXArray(Qwen3DVAEDecoder.mean, [1, 16, 1, 1])
-        let stdA = MLXArray(Qwen3DVAEDecoder.std, [1, 16, 1, 1])
+        let meanA = MLXArray(Qwen3DVAEStats.mean, [1, 16, 1, 1])
+        let stdA = MLXArray(Qwen3DVAEStats.std, [1, 16, 1, 1])
         var h = latents * stdA + meanA
         h = postQuant(h)
         h = convIn(h)

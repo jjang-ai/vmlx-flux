@@ -132,6 +132,29 @@ final class QwenImageEditSupportTests: XCTestCase {
         XCTAssertEqual(values[1024 * 1024 * 2], -1.0, accuracy: 0.001)
     }
 
+    func testConditioningLatentsPackEncodedVAELatentsWithImageIDs() throws {
+        let encoded = MLXArray((0 ..< (16 * 4 * 6)).map(Float.init), [1, 16, 4, 6])
+            .asType(.float32)
+
+        let conditioning = try QwenImageEditPreprocessor.conditioningLatents(
+            encodedLatents: encoded,
+            height: 32,
+            width: 48)
+
+        XCTAssertEqual(conditioning.latents.shape, [1, 6, 64])
+        XCTAssertEqual(conditioning.imageIDs.shape, [1, 6, 3])
+        XCTAssertEqual(conditioning.patchRows, 2)
+        XCTAssertEqual(conditioning.patchColumns, 3)
+
+        let packed = conditioning.latents.asArray(Float.self)
+        XCTAssertEqual(Array(packed[0 ..< 8]), [0, 1, 6, 7, 24, 25, 30, 31])
+        XCTAssertEqual(Array(packed[64 ..< 72]), [2, 3, 8, 9, 26, 27, 32, 33])
+        XCTAssertEqual(Array(packed[192 ..< 200]), [12, 13, 18, 19, 36, 37, 42, 43])
+
+        let ids = conditioning.imageIDs.asArray(Float.self)
+        XCTAssertEqual(Array(ids[0 ..< 9]), [1, 0, 0, 1, 0, 1, 1, 0, 2])
+    }
+
     func testQwenImageEditReadsSourceImageBeforeNotImplementedBoundary() async throws {
         let model = try makeTemporaryQwenImageEditBundle()
         let source = try makePNG(width: 1536, height: 1024)

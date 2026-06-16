@@ -121,6 +121,13 @@ public struct QwenImageEditVAEInput {
     public let tensor: MLXArray
 }
 
+public struct QwenImageEditConditioningLatents {
+    public let latents: MLXArray
+    public let imageIDs: MLXArray
+    public let patchRows: Int
+    public let patchColumns: Int
+}
+
 public enum QwenImageEditPreprocessor {
     public static let patchSize = 14
     public static let temporalPatchSize = 2
@@ -172,6 +179,34 @@ public enum QwenImageEditPreprocessor {
             height: plan.vaeHeight,
             normalization: .minusOneToOne)
         return QwenImageEditVAEInput(tensor: tensor)
+    }
+
+    public static func conditioningLatents(
+        encodedLatents: MLXArray,
+        height: Int,
+        width: Int
+    ) throws -> QwenImageEditConditioningLatents {
+        guard height > 0, width > 0, height % 16 == 0, width % 16 == 0 else {
+            throw FluxError.invalidRequest("Qwen edit conditioning latent dimensions must be positive multiples of 16")
+        }
+        guard encodedLatents.dim(0) == 1,
+              encodedLatents.dim(1) == 16,
+              encodedLatents.dim(2) == height / 8,
+              encodedLatents.dim(3) == width / 8
+        else {
+            throw FluxError.invalidRequest(
+                "Qwen edit encoded VAE latents must have shape 1x16x\(height / 8)x\(width / 8)")
+        }
+
+        let packed = patchify(encodedLatents, patchSize: 2, inChannels: 16)
+        let ids = try QwenImageEditPreprocessPlan.imageIDs(height: height, width: width)
+        let idValues = ids.flatMap { $0.map(Float.init) }
+        let imageIDs = MLXArray(idValues, [1, ids.count, 3]).asType(.float32)
+        return QwenImageEditConditioningLatents(
+            latents: packed,
+            imageIDs: imageIDs,
+            patchRows: height / 16,
+            patchColumns: width / 16)
     }
 
     public static func smartResize(
@@ -237,5 +272,23 @@ public enum QwenImageEditPreprocessor {
             }
         }
         return values
+    }
+}
+
+public enum QwenImageEditConditioner {
+    public static func encode(
+        modelPath: URL,
+        sourceImage: URL,
+        plan: QwenImageEditPreprocessPlan
+    ) throws -> QwenImageEditConditioningLatents {
+        let store = MFluxStore(try WeightLoader.load(from: modelPath))
+        let encoder = try Qwen3DVAEEncoder(store: store)
+        let vaeInput = try QwenImageEditPreprocessor.vaeInput(sourceImage: sourceImage, plan: plan)
+        let encoded = encoder.encode(vaeInput.tensor)
+        eval(encoded)
+        return try QwenImageEditPreprocessor.conditioningLatents(
+            encodedLatents: encoded,
+            height: plan.vaeHeight,
+            width: plan.vaeWidth)
     }
 }

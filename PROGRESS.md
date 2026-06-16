@@ -45,20 +45,31 @@
   with `edit_requested=true`, turn status `threw`, and error text containing
   `preprocess output=1024x1024 vl=384x384 vae=1024x1024 conditioning=64x64
   vision_patches=784x1176 vision_grid=1x28x28 vae_input=1x3x1024x1024`.
+- **Qwen-Image-Edit VAE conditioning boundary:** added the source-image Qwen 3D
+  VAE encoder path (`Qwen3DVAEEncoder`) plus the tested mflux-compatible
+  static-latent pack/image-ID wrapper. Added probe `--qwen-edit-conditioning`;
+  live q4 run loaded the staged bundle, encoded `docs/local/qwen-edit-source-512.png`
+  through the VAE, and wrote finite packed latents. Artifact:
+  `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-conditioning-live/Qwen-Image-Edit-mflux-q4-load.json`
+  with `qwen_edit_conditioning.status=encoded`, `latents_shape=1x4096x64`,
+  `image_ids_shape=1x4096x3`, and finite min/mean/max stats. This proves the
+  conditioning boundary only; Qwen-VL prompt-image encoding, transformer latent
+  concat, denoise loop, and edited PNG output remain pending.
 - **Qwen-Edit guardrail tests:** red test first caught the previous fake load
   (`QwenImageEdit` accepted a bundle missing vision tower keys). After the
   validator landed,
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter vMLXFluxTests.RegistryTests/testQwenImageEdit`
   passed 3 tests. The new
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter vMLXFluxTests.QwenImageEditSupportTests`
-  preprocess/edit-boundary suite now passes 8 tests, including Qwen-VL patch
-  shape/normalization and VAE input tensor shape/range. Full
+  preprocess/edit-boundary suite now passes 9 tests, including Qwen-VL patch
+  shape/normalization, VAE input tensor shape/range, and static conditioning
+  latent pack/image-ID order. Full
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` passes
-  31 tests.
+  32 tests.
 - **Probe metadata fixed:** scan JSON now reports `native_pipeline_implemented`
   for `z-image-turbo`, `flux1-schnell`, and `qwen-image`; `qwen-image-edit`
   remains `not_implemented` with blockers for the missing Qwen2.5-VL vision
-  encoder, VAE image encode/conditioning path, and live edit proof.
+  encoder, transformer latent concat/denoise loop, and live edited-image proof.
 
 ### 2026-06-15 — native Z-Image proven + vendored into vmlx-swift
 - **`ZImageNative.swift` (NEW, 1202 lines)**: full native Z-Image-Turbo pipeline —

@@ -144,8 +144,10 @@ for try await event in engine.generate(request) {
   and VAE image-input tensor) before stopping at the typed
   `FluxError.notImplemented` body. Current live artifact records
   `vision_patches=784x1176`, `vision_grid=1x28x28`, and
-  `vae_input=1x3x1024x1024`. This is still `PARTIAL`; no edited image is
-  generated yet.
+  `vae_input=1x3x1024x1024`. A separate q4 conditioning probe live-encodes the
+  source image through the Qwen 3D VAE and packs static image latents
+  (`latents_shape=1x4096x64`, `image_ids_shape=1x4096x3`, finite stats). This is
+  still `PARTIAL`; no edited image is generated yet.
 
 `vmlxflux-probe` is the scan/load/generate verification CLI. Run live probes from
 `/Users/eric/vmlx-swift` or another directory containing `default.metallib`; the
@@ -157,7 +159,9 @@ weights are nested quant variants; the local store lists `Qwen-Image-Edit-mflux-
 `-q4`, `-q5`, and incomplete `-q6`; q4 now has load-only proof at
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-manifest-load/` and
 edit-preprocess proof at
-`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-preprocess-live/`. Their
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-preprocess-live/`, plus
+VAE-conditioning proof at
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-conditioning-live/`. Their
 remaining ports need:
 
 1. **FluxTransformer** (Dual-encoder Flux1 + single-encoder Flux2, DiT)
