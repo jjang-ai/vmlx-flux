@@ -7,11 +7,14 @@ reference template. For osaurus teammates + future porting sessions.
 **Status (2026-06-16):** `qwen-image` text-to-image is implemented in
 `Common/QwenImageNative.swift` and live-proven for the local 4-bit, 6-bit, and 8-bit
 mflux bundles with same-seed determinism, prompt sensitivity, and visual
-inspection. In the Osaurus monorepo worktree, `qwen-image-mflux-4bit` also has
-fresh load proof at
-`docs/local/vmlx-flux-probes/2026-06-16-osaurus-qwen-image-q4-load-final/qwen-image-mflux-4bit-load.json`.
+inspection. Current ee9 proof for `qwen-image-mflux-4bit` is
+`docs/local/vmlx-flux-probes/2026-06-16-current-ee9-qwen-image-4bit-gen20/qwen-image-mflux-4bit-load.json`;
+turns 1 and 3 share apple SHA
+`49de5a0cdedc258cf506753d5357e959ad6c7dbaf6e7df33cc30f5bea41e47eb`, while the
+blue mountain/sun watercolor prompt has SHA
+`4d50b67ecda16180d660aa5b7e3cd7a9ef023d1dfd785a4097645b9830268a1a`.
 `Qwen-Image-mflux-6bit` is staged locally from `filipstrand/Qwen-Image-mflux-6bit`
-and live-proven at
+and retained live-proven at
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-image-6bit-gen20-after-key-fix/Qwen-Image-mflux-6bit-load.json`;
 turns 1 and 3 share apple SHA
 `66e8187e887087e8a8e9227a99f16236c5ba15717a5e31e08a5772868b3a456a`, while the
@@ -22,39 +25,47 @@ bundle uses Diffusers-style nested modulation keys
 that layout and the 4-bit `img_mod_linear` / `txt_mod_linear` layout.
 `qwen-image-mflux-8bit` is staged locally from `AbstractFramework/qwen-image-8bit`
 (repo SHA `c92c2b346b705f797897a29c4a7b5334cb501f44`; index metadata
-`quantization_level=8`, `mflux_version=0.18.2`) and live-proven at
-`docs/local/vmlx-flux-probes/2026-06-16-qwen-image-8bit-gen20/qwen-image-mflux-8bit-load.json`;
+`quantization_level=8`, `mflux_version=0.18.2`) and current-ee9 live-proven at
+`docs/local/vmlx-flux-probes/2026-06-16-current-ee9-qwen-image-8bit-gen20/qwen-image-mflux-8bit-load.json`;
 turns 1 and 3 share apple SHA
 `1611715920c71fbb40c02011035ff616c93745386e2708570c595f439b15cae3`, while the
 blue mountain/sun watercolor prompt has SHA
 `67a9f6195777c06a70e81230756015718110472df38ef5688608516637862c70`. The 8-bit
 bundle quantizes text-encoder embeddings/linears too; Swift loads those through
 the shared `MFluxEmbedding`/`MFluxLinear` group-quant paths.
-`qwen-image-edit` q4 and q5 are live-proven for text-image edit after the VL-grid
+`qwen-image-edit` q4/q5/q6/q8 are live-proven for text-image edit after the VL-grid
 conditioning fix. Source trace: mflux passes `vl_width/vl_height` into
 `QwenEditUtil.create_image_conditioning_latents`, and that utility uses those
 dimensions for source-image VAE conditioning when present. Swift now mirrors
 that path in `QwenImageEditSupport.swift`: square source conditioning is
 384x384 -> 24x24 -> 576 static tokens, not 1024x1024 -> 64x64 -> 4096 tokens.
-q4 live proof:
-`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-determinism-after-cond-fix/Qwen-Image-Edit-mflux-q4-load.json`
-has a coherent same-prompt deterministic repeat (blue edit SHA
-`005ab8baddfe9b7a94aa83f8ddd22d192e7e5a0275c556dcf2ead76a565e474a` for turns
-1 and 3) and a different coherent green-pear edit (SHA
-`815711be73a9e89599b3e97f9f15196115875103f9407d7b1b61bab33de8e3b4`).
-q5 live proof:
+Current ee9 q4 live proof:
+`docs/local/vmlx-flux-probes/2026-06-16-current-ee9-qwen-edit-q4-gen20/Qwen-Image-Edit-mflux-q4-load.json`
+has a same-prompt deterministic repeat (blue edit SHA
+`6fb6da7ef3a200dc187e46d80ef7d79109c94c43bb5b6ceec5caa6883ec2e3a8`) and a
+different green-pear edit (SHA
+`24dd197f067682343260a2dbafbcd93a4ef2385041d4bf85a3c00479251c546e`), but q4
+remains visibly noisier/weaker than q8 on shape-changing edits. Retained q5 live proof:
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q5-determinism/Qwen-Image-Edit-mflux-q5-load.json`
 has a coherent same-prompt deterministic repeat (blue edit SHA
 `5cd5d9197bd659bd8b59b4a2f2bca413266146ad4e08249289d5fa6a8025fa4e` for turns
 1 and 3) and a different coherent green-pear edit (SHA
 `d2c6c4eb4a19dcf48122b5216fc15ac37b9f5aa49c15f596acd1276a4df57034`).
+Current ee9 q8 live proof:
+`docs/local/vmlx-flux-probes/2026-06-16-current-ee9-qwen-edit-q8-gen20/Qwen-Image-Edit-mflux-q8-load.json`
+has a clean same-prompt deterministic repeat (blue edit SHA
+`9f1bf39099338a62933597a066a0f22a48cd96f51e535c41974ad0c952a8b11f`) and a
+different clean green-pear edit (SHA
+`47cb94e5823e6714878a3b0948bae9f8f6c47b6e25c634c998d00fae38fe9daa`).
 Shape proof:
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-conditioning-after-cond-fix/Qwen-Image-Edit-mflux-q4-load.json`
 (`latents_shape=1x576x64`) and
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-denoise-after-cond-fix/Qwen-Image-Edit-mflux-q4-load.json`
-(`combined_velocity_shape=1x1600x64`). Do not expose q3 because its
-text-encoder index references missing `text_encoder/3.safetensors`; keep q6
-blocked until its local bundle is complete, and masks/inpaint are not wired yet.
+(`combined_velocity_shape=1x1600x64`). q3 now loads after staging
+`q3/text_encoder/3.safetensors`, but viewed q3 output is high-noise and not a
+clean prompt-following edit; keep q3 hidden. q6 is staged and retained
+live-proven clean from `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q6-after-download-gen20/Qwen-Image-Edit-mflux-q6-load.json`.
+Masks/inpaint are not wired yet.
 Current Qwen edit rejects non-null `mask` before the pipeline loads; keep the UI
 mask control hidden until real mask conditioning lands.
 

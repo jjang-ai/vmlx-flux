@@ -12,48 +12,45 @@ contract osaurus implements server-side and the UI builds against.
 
 > Status: the engine is real on Osaurus `vmlx-origin/main`. Current scanner/load
 > proof exists for all local image rows at
-> `docs/local/vmlx-flux-probes/2026-06-16-qwen-image-8bit-status-refresh-load-matrix/compatibility-matrix.json`
-> (14 scanned, 14 loaded after staging qwen-edit q3/q6/q8 and qwen-image 8-bit).
-> Current 103be live generation/edit proof exists for `z-image-turbo` 4/8-bit,
-> `flux1-schnell` 4/8-bit, `qwen-image` 4/6-bit, qwen-edit q4/q5, and staged
-> `ideogram-4-fp8`/`ideogram-4-nf4`; current ed84 follow-up proof adds clean
-> qwen-edit q6/q8 rows, and current da782 follow-up proof adds qwen-image 8-bit:
-> `docs/local/vmlx-flux-probes/2026-06-16-current-103be-zimage-4bit-gen/`,
-> `2026-06-16-current-103be-zimage-8bit-gen/`,
-> `2026-06-16-current-103be-flux-schnell-4bit-gen/`,
-> `2026-06-16-current-103be-flux-schnell-8bit-gen/`,
-> `2026-06-16-current-103be-qwen-image-4bit-gen20/`,
-> `2026-06-16-current-103be-qwen-image-6bit-gen20/`,
-> `docs/local/vmlx-flux-probes/2026-06-16-qwen-image-8bit-gen20/`,
-> `2026-06-16-current-103be-qwen-edit-q4-gen20/`,
-> `2026-06-16-current-103be-qwen-edit-q5-gen20/`,
-> `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q6-after-download-gen20/`,
-> `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q8-after-download-gen20/`,
-> `2026-06-16-current-103be-ideogram-fp8-bb4-exact/`, and
-> `2026-06-16-current-103be-ideogram-nf4-bb4-exact/`.
+> `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-status-load-matrix/compatibility-matrix.json`
+> (14 scanned, 14 loaded on `ee9fa928354d4d39c600731ac8d34c4998545cb3`).
+> Current ee9 live generation/edit proof exists for `z-image-turbo` 4/8-bit,
+> `flux1-schnell` 4/8-bit, `qwen-image` 4/8-bit, qwen-edit q4/q8, and staged
+> `ideogram-4-fp8`/`ideogram-4-nf4`; retained earlier proof still covers
+> qwen-image 6-bit, qwen-edit q5, and qwen-edit q6:
+> `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-zimage-4bit-gen/`,
+> `2026-06-16-current-ee9-zimage-8bit-gen/`,
+> `2026-06-16-current-ee9-flux-schnell-4bit-gen/`,
+> `2026-06-16-current-ee9-flux-schnell-8bit-gen/`,
+> `2026-06-16-current-ee9-qwen-image-4bit-gen20/`,
+> `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-qwen-image-8bit-gen20/`,
+> `2026-06-16-current-ee9-qwen-edit-q4-gen20/`,
+> `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-qwen-edit-q8-gen20/`,
+> `2026-06-16-current-ee9-ideogram-fp8-bb4-exact/`, and
+> `2026-06-16-current-ee9-ideogram-nf4-bb4-exact/`.
 > Viewed contact sheet:
-> `docs/local/vmlx-flux-outputs/2026-06-16-current-103be-contact-sheet.png`.
+> `docs/local/vmlx-flux-outputs/2026-06-16-current-ee9-contact-sheet.png`.
 > Expose only proven local variants for normal testing. Keep qwen-edit q3 hidden:
 > it now loads after staging `q3/text_encoder/3.safetensors`, but the viewed
 > 20-step edit output is high-noise and not a clean prompt-following edit. Hide
 > qwen mask/inpaint controls because the mflux qwen-edit reference exposes no
-> qwen mask path. qwen-edit q6 and q8 are clean current-ed84 edit rows; q5 is
-> clean; q4 is current-103be deterministic and color-prompt-sensitive but visibly
-> noisier/weaker on shape-changing edits.
+> qwen mask path. qwen-edit q8 is clean current-ee9; q5/q6 remain clean from
+> retained earlier artifacts; q4 is current-ee9 deterministic and
+> color-prompt-sensitive but visibly noisier/weaker on shape-changing edits.
 > Ideogram fp8 is implemented/testable for the staged mirror with typography
-> and current-103be strict clean object-icon proof. Ideogram NF4 is implemented/testable for
+> and current-ee9 strict clean object-icon proof. Ideogram NF4 is implemented/testable for
 > the staged `cocktailpeanut/ideogram-4-nf4` mirror with strict 512px
 > object-icon proof: apple/repeat SHA
-> `76cd995b90d4ad85140418ae1d3a8a44bc688d03840041ff93ff2cd006e748df`,
+> `be4d0e5676f78f464e3aeb1862a9c3f6a18b4197487fc78a4df770c173b611bc`,
 > mountains SHA
-> `302ffe06596c718df6a118a56bcc0e8ec7437edee1dc9ba1656d0cd5d2052425`.
+> `f2ed31ec2c65d499cd0a5b958d8a8c853af78d7aea0934468a2cb221180bada6`.
 > Boundary: current 103be seed/order variants with adjacent repeated prompts
 > generated safety-filter-like text cards for fp8 and NF4, and a broader a188
 > fp8 "no text" apple prompt hallucinated text, so do not present Ideogram as a
 > general clean object renderer yet.
 > Official `ideogram-ai/*` downloads still require approval for the current
-> account (`hf download ... --dry-run` returned access denied for both fp8 and
-> nf4 on 2026-06-16).
+> account (`hf download ... --dry-run` was rechecked for both fp8 and nf4 on
+> 2026-06-16, and both returned access denied).
 > Multi-image qwen-edit proof: vMLX source includes ordered
 > `ImageEditRequest.sourceImages`. q4 artifact:
 > `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-multi-image-live/Qwen-Image-Edit-mflux-q4-load.json`;

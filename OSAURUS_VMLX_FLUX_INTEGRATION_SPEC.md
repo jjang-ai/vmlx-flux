@@ -30,42 +30,39 @@
   embeddings (see §7). This is the single most important wiring correctness note.
 - **Per-model status:** Osaurus `vmlx-origin/main` has current scanner/load
   proof for all local image rows. Load/status matrix:
-  `docs/local/vmlx-flux-probes/2026-06-16-qwen-image-8bit-status-refresh-load-matrix/compatibility-matrix.json`
-  (14 scanned, 14 loaded after staging qwen-edit q3/q6/q8 and qwen-image 8-bit).
-  Current 103be generation/edit proof exists for `z-image-turbo` 4/8-bit,
-  `flux1-schnell` 4/8-bit, `qwen-image` 4/6-bit, qwen-edit q4/q5, and staged
-  `ideogram-4-fp8`/`ideogram-4-nf4`. Current ed84 follow-up proof adds clean
-  qwen-edit q6/q8 rows, and current da782 follow-up proof adds qwen-image 8-bit.
-  Current proof roots:
-  `2026-06-16-current-103be-zimage-4bit-gen/`,
-  `2026-06-16-current-103be-zimage-8bit-gen/`,
-  `2026-06-16-current-103be-flux-schnell-4bit-gen/`,
-  `2026-06-16-current-103be-flux-schnell-8bit-gen/`,
-  `2026-06-16-current-103be-qwen-image-4bit-gen20/`,
-  `2026-06-16-current-103be-qwen-image-6bit-gen20/`,
-  `2026-06-16-qwen-image-8bit-gen20/`,
-  `2026-06-16-current-103be-qwen-edit-q4-gen20/`,
-  `2026-06-16-current-103be-qwen-edit-q5-gen20/`,
-  `2026-06-16-qwen-edit-q6-after-download-gen20/`,
-  `2026-06-16-qwen-edit-q8-after-download-gen20/`,
-  `2026-06-16-current-103be-ideogram-fp8-bb4-exact/`, and
-  `2026-06-16-current-103be-ideogram-nf4-bb4-exact/`.
-  Current 103be contact sheet:
-  `docs/local/vmlx-flux-outputs/2026-06-16-current-103be-contact-sheet.png`.
+  `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-status-load-matrix/compatibility-matrix.json`
+  (14 scanned, 14 loaded on `ee9fa928354d4d39c600731ac8d34c4998545cb3`).
+  Current ee9 generation/edit proof exists for `z-image-turbo` 4/8-bit,
+  `flux1-schnell` 4/8-bit, `qwen-image` 4/8-bit, qwen-edit q4/q8, and staged
+  `ideogram-4-fp8`/`ideogram-4-nf4`. Retained earlier proof still covers
+  qwen-image 6-bit, qwen-edit q5, and qwen-edit q6.
+  Current ee9 proof roots:
+  `2026-06-16-current-ee9-zimage-4bit-gen/`,
+  `2026-06-16-current-ee9-zimage-8bit-gen/`,
+  `2026-06-16-current-ee9-flux-schnell-4bit-gen/`,
+  `2026-06-16-current-ee9-flux-schnell-8bit-gen/`,
+  `2026-06-16-current-ee9-qwen-image-4bit-gen20/`,
+  `2026-06-16-current-ee9-qwen-image-8bit-gen20/`,
+  `2026-06-16-current-ee9-qwen-edit-q4-gen20/`,
+  `2026-06-16-current-ee9-qwen-edit-q8-gen20/`,
+  `2026-06-16-current-ee9-ideogram-fp8-bb4-exact/`, and
+  `2026-06-16-current-ee9-ideogram-nf4-bb4-exact/`.
+  Current ee9 contact sheet:
+  `docs/local/vmlx-flux-outputs/2026-06-16-current-ee9-contact-sheet.png`.
   qwen-edit q3 is loadable after staging `q3/text_encoder/3.safetensors`, but
   remains hidden because its viewed 20-step edit output is high-noise and not a
   clean prompt-following edit. qwen masks are intentionally hidden because the
   mflux qwen-edit reference has no qwen mask/inpaint argument or path.
-  qwen-edit q6 and q8 are clean current-ed84 edit rows; q5 is clean; current
-  103be q4 proof is deterministic and color-sensitive but visibly noisy/weaker
+  qwen-edit q8 is a clean current-ee9 edit row; q6 and q5 remain clean from
+  retained earlier artifacts; current ee9 q4 proof is deterministic and color-sensitive but visibly noisy/weaker
   on shape-changing green-pear prompts. `ideogram-4-fp8` is implemented/testable for the staged
   `cocktailpeanut/ideogram-4-fp8` mirror with readable HELLO/BANANA typography
-  proof plus current 103be clean 512px object-icon proof. `ideogram-4-nf4` is
+  proof plus current ee9 clean 512px object-icon proof. `ideogram-4-nf4` is
   implemented/testable for the staged `cocktailpeanut/ideogram-4-nf4` mirror
   with clean 512px object-icon proof (apple/repeat SHA
-  `76cd995b90d4ad85140418ae1d3a8a44bc688d03840041ff93ff2cd006e748df`,
+  `be4d0e5676f78f464e3aeb1862a9c3f6a18b4197487fc78a4df770c173b611bc`,
   mountains SHA
-  `302ffe06596c718df6a118a56bcc0e8ec7437edee1dc9ba1656d0cd5d2052425`).
+  `f2ed31ec2c65d499cd0a5b958d8a8c853af78d7aea0934468a2cb221180bada6`).
   Boundary: current 103be seed/order variants with adjacent repeated prompts
   generated safety-filter-like text cards, so keep broader object-renderer
   wording hidden.
@@ -258,7 +255,7 @@ local bundles with live text-image edit proof; q3 is loadable after staging
 `q3/text_encoder/3.safetensors`, but stays hidden because the viewed 20-step
 edit output is high-noise and not a clean prompt-following edit. Earlier
 qwen-edit-only staging matrix, superseded for current overall status by
-`docs/local/vmlx-flux-probes/2026-06-16-qwen-image-8bit-status-refresh-load-matrix/compatibility-matrix.json`:
+`docs/local/vmlx-flux-probes/2026-06-16-current-ee9-status-load-matrix/compatibility-matrix.json`:
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q6q8-status-refresh-load-matrix/compatibility-matrix.json`
 (13 scanned, 13 loaded). The current q4
 load-only artifact:
@@ -337,13 +334,13 @@ their 4-bit linears through scale tensors at load time inside the model.
 
 | Canonical | Native runtime status | What's real | What's missing |
 |---|---|---|---|
-| **z-image-turbo** | `native_pipeline_implemented` | Full native port: Qwen-style text encoder, patchify+caption-concat DiT, real `AutoencoderKL` VAE decode, real 4/8-bit weight decode, PNG out. Current 103be proof: 4-bit artifact `docs/local/vmlx-flux-probes/2026-06-16-current-103be-zimage-4bit-gen/Z-Image-Turbo-mflux-4bit-load.json` (apple/repeat SHA `5a05e19c3af197b6bdc7dd396311bd09c4b5cd99506fd0650fbbcb700c14ca09`, mountain `86b0ba7c1be426ec6d5fadf8c8a626af6a3aba20dd59e7d2d611d9e9e3c288c5`) and 8-bit artifact `docs/local/vmlx-flux-probes/2026-06-16-current-103be-zimage-8bit-gen/Z-Image-Turbo-mflux-8bit-load.json` (apple/repeat `c3a59a9768efa034863ec6eb3a9df4d50fe7b4b40a607739bde83b388afefdc7`, mountain `2ea29580f7c50aaa155a3e16f19282512fc355b9c1633cad6165c7c8efb7986f`); all three turns completed and viewed coherent. | 1024px tuning. |
-| **qwen-image** | `native_pipeline_implemented` | Full native pipeline `QwenImageNative.swift`: Qwen2.5 LM text encoder (GQA), 60-layer MM-DiT, 3D causal-conv VAE, mflux guidance-rescaled CFG. Current 103be 4-bit proof: `docs/local/vmlx-flux-probes/2026-06-16-current-103be-qwen-image-4bit-gen20/qwen-image-mflux-4bit-load.json` (apple/repeat SHA `d4f536e4ea65bb979a8e812f60f3a5a9799f7eb702adc5c031a4827be9e9103a`, mountain `e7471663bc360ff796428550c73caa18668838b4daccbb02566d1024a5e21192`; viewed coherent). Current 103be 6-bit proof: `docs/local/vmlx-flux-probes/2026-06-16-current-103be-qwen-image-6bit-gen20/Qwen-Image-mflux-6bit-load.json` (apple/repeat `dbe3755ae644663da7cd42737e411022b8cc5211fea2173ad7782a291ed5a73f`, mountain `8a355fdfcb61112a40a0b1ce39f2b571b2be05226d36ab85148c27caccb3bbd5`; viewed coherent). Current da782 8-bit proof from `AbstractFramework/qwen-image-8bit` staged as `qwen-image-mflux-8bit`: `docs/local/vmlx-flux-probes/2026-06-16-qwen-image-8bit-gen20/qwen-image-mflux-8bit-load.json` (apple/repeat `1611715920c71fbb40c02011035ff616c93745386e2708570c595f439b15cae3`, mountain `67a9f6195777c06a70e81230756015718110472df38ef5688608516637862c70`; viewed coherent). | Full not staged/proven. Three port bugs fixed: VAE conv weights are MLX channels-last (not PyTorch); qwen timestep is raw sigma (QwenTimesteps applies x1000 internally); qwen txt2img mod-linear keys can be either `img_mod_linear`/`txt_mod_linear` or nested `img_norm1.mod_linear`/`txt_norm1.mod_linear`; qwen 8-bit quantized text-encoder embeddings/linears load through `MFluxEmbedding`/`MFluxLinear` group-quant paths. |
-| qwen-image-edit | `native_pipeline_implemented` for `Qwen-Image-Edit-mflux-q4`, `Qwen-Image-Edit-mflux-q5`, `Qwen-Image-Edit-mflux-q6`, and `Qwen-Image-Edit-mflux-q8`; `native_pipeline_partial` for q3 | q4/q5/q6/q8 scan as loadable local bundles and have live text-image edit proof. q6 proof: `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q6-after-download-gen20/Qwen-Image-Edit-mflux-q6-load.json` (blue apple/repeat `475cdbc7e3066d74c646245cdb99d23c52fcaca070376447bdfee3d295a97330`, green pear `d4a05f4e424f1679441bce643be16dabbdb425efb0c866d91415efce17f96271`; viewed clean). q8 proof: `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q8-after-download-gen20/Qwen-Image-Edit-mflux-q8-load.json` (blue apple/repeat `72862df44d35d2db7e386cde402dd8c602d48c0e6d07ba55d4839ae1e438b743`, green pear `9eb6868adb9e3d0f601bbca537522a39a672051a3938a3df17995a2d52fe8678`; viewed clean). q5 remains clean; q4 is deterministic but noisier/weaker on shape-changing edits. q3 loads after staging `q3/text_encoder/3.safetensors`, but viewed output is high-noise, so it stays hidden. Non-null qwen masks are rejected before the edit pipeline loads and covered by `QwenImageEditSupportTests.testQwenImageEditRejectsMaskBeforePipelineLoad`. | q3 should stay hidden until a real coherent edit row exists; qwen mask/inpaint is unsupported by the current mflux reference; broader Osaurus production matrix still pending. |
+| **z-image-turbo** | `native_pipeline_implemented` | Full native port: Qwen-style text encoder, patchify+caption-concat DiT, real `AutoencoderKL` VAE decode, real 4/8-bit weight decode, PNG out. Current ee9 proof: 4-bit artifact `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-zimage-4bit-gen/Z-Image-Turbo-mflux-4bit-load.json` (apple/repeat SHA `0ccf6cbd40d64bd186da937df1b4977707a64f9c4d5c16a5ae5083f482c09dba`, mountain `8f48ad2c5563460d8dcb6553506c6470214e52fe84758a7cf2971433e9ee1eeb`) and 8-bit artifact `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-zimage-8bit-gen/Z-Image-Turbo-mflux-8bit-load.json` (apple/repeat `82788d5ab43d8350e5c9e093f70fc686319e9525e46e6cf811988241825cc2b5`, mountain `a0bd60a357232cc813a2b1e5d049fabbfdebcc1ae9147463fea188b393f6eeb2`); all three turns completed and viewed coherent. | 1024px tuning. |
+| **qwen-image** | `native_pipeline_implemented` | Full native pipeline `QwenImageNative.swift`: Qwen2.5 LM text encoder (GQA), 60-layer MM-DiT, 3D causal-conv VAE, mflux guidance-rescaled CFG. Current ee9 4-bit proof: `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-qwen-image-4bit-gen20/qwen-image-mflux-4bit-load.json` (apple/repeat SHA `49de5a0cdedc258cf506753d5357e959ad6c7dbaf6e7df33cc30f5bea41e47eb`, mountain `4d50b67ecda16180d660aa5b7e3cd7a9ef023d1dfd785a4097645b9830268a1a`; viewed coherent). Retained 103be 6-bit proof: `docs/local/vmlx-flux-probes/2026-06-16-current-103be-qwen-image-6bit-gen20/Qwen-Image-mflux-6bit-load.json` (apple/repeat `dbe3755ae644663da7cd42737e411022b8cc5211fea2173ad7782a291ed5a73f`, mountain `8a355fdfcb61112a40a0b1ce39f2b571b2be05226d36ab85148c27caccb3bbd5`; viewed coherent). Current ee9 8-bit proof from `AbstractFramework/qwen-image-8bit` staged as `qwen-image-mflux-8bit`: `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-qwen-image-8bit-gen20/qwen-image-mflux-8bit-load.json` (apple/repeat `1611715920c71fbb40c02011035ff616c93745386e2708570c595f439b15cae3`, mountain `67a9f6195777c06a70e81230756015718110472df38ef5688608516637862c70`; viewed coherent). | Full not staged/proven. Three port bugs fixed: VAE conv weights are MLX channels-last (not PyTorch); qwen timestep is raw sigma (QwenTimesteps applies x1000 internally); qwen txt2img mod-linear keys can be either `img_mod_linear`/`txt_mod_linear` or nested `img_norm1.mod_linear`/`txt_norm1.mod_linear`; qwen 8-bit quantized text-encoder embeddings/linears load through `MFluxEmbedding`/`MFluxLinear` group-quant paths. |
+| qwen-image-edit | `native_pipeline_implemented` for `Qwen-Image-Edit-mflux-q4`, `Qwen-Image-Edit-mflux-q5`, `Qwen-Image-Edit-mflux-q6`, and `Qwen-Image-Edit-mflux-q8`; `native_pipeline_partial` for q3 | q4/q5/q6/q8 scan as loadable local bundles and have live text-image edit proof. Current ee9 q4 proof: `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-qwen-edit-q4-gen20/Qwen-Image-Edit-mflux-q4-load.json` (blue apple/repeat `6fb6da7ef3a200dc187e46d80ef7d79109c94c43bb5b6ceec5caa6883ec2e3a8`, green pear `24dd197f067682343260a2dbafbcd93a4ef2385041d4bf85a3c00479251c546e`; viewed deterministic but noisier/weaker). Current ee9 q8 proof: `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-qwen-edit-q8-gen20/Qwen-Image-Edit-mflux-q8-load.json` (blue apple/repeat `9f1bf39099338a62933597a066a0f22a48cd96f51e535c41974ad0c952a8b11f`, green pear `47cb94e5823e6714878a3b0948bae9f8f6c47b6e25c634c998d00fae38fe9daa`; viewed clean). q5 and q6 remain clean from retained earlier artifacts. q3 loads after staging `q3/text_encoder/3.safetensors`, but viewed output is high-noise, so it stays hidden. Non-null qwen masks are rejected before the edit pipeline loads and covered by `QwenImageEditSupportTests.testQwenImageEditRejectsMaskBeforePipelineLoad`. | q3 should stay hidden until a real coherent edit row exists; qwen mask/inpaint is unsupported by the current mflux reference; broader Osaurus production matrix still pending. |
 | flux2-klein / flux2-klein-edit | `not_implemented` | Bundle scans + loads; `FluxDiTConfig.flux2Klein` preset exists. | T5 (single-encoder) port + weight key-map + 3-axis RoPE. |
-| **flux1-schnell** | `native_pipeline_implemented` | Full native pipeline `Flux1Native.swift`: T5-XXL + CLIP-L encoders, full DiT, AutoencoderKL VAE, mflux decode. Current 103be proof: 4-bit artifact `docs/local/vmlx-flux-probes/2026-06-16-current-103be-flux-schnell-4bit-gen/FLUX.1-schnell-mflux-4bit-load.json` (apple/repeat SHA `74f57cc0f4fd80a66c8c7f12b653840c27a30207e2a2d735d359a585a7eac86a`, mountain `d38fc11f0aee4afe3531968b1d0097ce2b4ae58442338667ae427e9bbe0036b2`) and 8-bit artifact `docs/local/vmlx-flux-probes/2026-06-16-current-103be-flux-schnell-8bit-gen/FLUX.1-schnell-mflux-8bit-load.json` (apple/repeat `c499e34fd9b4fb7b3b1c41dcf72bf703924d8fbdba212294f4a39fe712f43f8d`, mountain `6039e36a34f7b79d4385edb06421162c5abfc36b3a8de2b41d2d75c3204250a4`); all three turns completed and viewed coherent. | tokenizer.json must be staged (mflux ships slow tokenizers; convert; see port plan). Full precision pending. |
+| **flux1-schnell** | `native_pipeline_implemented` | Full native pipeline `Flux1Native.swift`: T5-XXL + CLIP-L encoders, full DiT, AutoencoderKL VAE, mflux decode. Current ee9 proof: 4-bit artifact `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-flux-schnell-4bit-gen/FLUX.1-schnell-mflux-4bit-load.json` (apple/repeat SHA `4c86f475b90346dd76622208d0dbc93377b91df70f1338098ae056e82a950bb6`, mountain `394d6ee0a7de6ac0dc5a2e4915406b8d8c82c9e1abd18d916218a911c041bad6`) and 8-bit artifact `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-flux-schnell-8bit-gen/FLUX.1-schnell-mflux-8bit-load.json` (apple/repeat `2fc342a36c011b8e0f67c643476873dec99cf9c438bf00df1d43a40b1b8d66c6`, mountain `0e2382537c91ad14b7b5a286495ec4b603f967ad0a98a6e085ba463e9cd9a5c2`); all three turns completed and viewed coherent. | tokenizer.json must be staged (mflux ships slow tokenizers; convert; see port plan). Full precision pending. |
 | flux1-dev/kontext/fill | `not_implemented` | dev = schnell + guidance embedder (small add); kontext/fill = edit variants. | wire guidance + edit conditioning on the working schnell pipeline. |
-| **ideogram** (Ideogram 4) | `native_pipeline_implemented` for staged fp8 and NF4 mirrors | Strong text/typography renderer. mflux-compatible official weights: `ideogram-ai/ideogram-4-fp8` or `ideogram-ai/ideogram-4-nf4` (4-bit). Official HF metadata is reachable, but official downloads still require approval for the current account. Complete mirror bundles are staged at `~/.mlxstudio/models/image/ideogram-4-fp8` and `~/.mlxstudio/models/image/ideogram-4-nf4`. Native source runs Qwen3 text encoder, conditional and unconditional 34-layer MM-DiT, fp8 `weight_scale` linears or bitsandbytes NF4 linears, mflux default 20-step guidance schedule, Flux2 VAE decode, and PNG output. fp8 typography proof remains `docs/local/vmlx-flux-probes/2026-06-16-ideogram-fp8-native-gen20-current-source/ideogram-4-fp8-load.json`. Current 103be fp8 strict object proof: `docs/local/vmlx-flux-probes/2026-06-16-current-103be-ideogram-fp8-bb4-exact/ideogram-4-fp8-load.json` (apple/repeat `deab6d605047add88657c645e1a3747c00ec85a7493dbc10ee0a09941f0f3bb3`, mountains `782e6be1d3250fbe85cae555a0aeba3a6e11e5213c4b895608acde693183930d`; viewed clean). Current 103be NF4 strict object proof: `docs/local/vmlx-flux-probes/2026-06-16-current-103be-ideogram-nf4-bb4-exact/ideogram-4-nf4-load.json` (apple/repeat `76cd995b90d4ad85140418ae1d3a8a44bc688d03840041ff93ff2cd006e748df`, mountains `302ffe06596c718df6a118a56bcc0e8ec7437edee1dc9ba1656d0cd5d2052425`; viewed clean). Boundary: current 103be seed/order variants with adjacent repeated prompts generated safety-filter-like text cards in `docs/local/vmlx-flux-probes/2026-06-16-current-103be-ideogram-fp8-object-strict/ideogram-4-fp8-load.json` and `docs/local/vmlx-flux-probes/2026-06-16-current-103be-ideogram-nf4-object-strict/ideogram-4-nf4-load.json`; older `docs/local/vmlx-flux-probes/2026-06-16-current-a188-ideogram-fp8-object-determinism/ideogram-4-fp8-load.json` hallucinated text on a broader no-text apple prompt. | Expose staged fp8 and NF4 mirrors for testing; if the product requires official `ideogram-ai/*`, keep official-bundle exposure gated until access is approved. Keep normal UI/API wording scoped to typography and strict object-icon prompt coverage until broader no-text object rows pass; broader Osaurus production matrix still pending. |
+| **ideogram** (Ideogram 4) | `native_pipeline_implemented` for staged fp8 and NF4 mirrors | Strong text/typography renderer. mflux-compatible official weights: `ideogram-ai/ideogram-4-fp8` or `ideogram-ai/ideogram-4-nf4` (4-bit). Official HF metadata is reachable, but official downloads still require approval for the current account; `hf download ... --dry-run` was rechecked for fp8 and nf4 on 2026-06-16 and both returned access denied. Complete mirror bundles are staged at `~/.mlxstudio/models/image/ideogram-4-fp8` and `~/.mlxstudio/models/image/ideogram-4-nf4`. Native source runs Qwen3 text encoder, conditional and unconditional 34-layer MM-DiT, fp8 `weight_scale` linears or bitsandbytes NF4 linears, mflux default 20-step guidance schedule, Flux2 VAE decode, and PNG output. fp8 typography proof remains `docs/local/vmlx-flux-probes/2026-06-16-ideogram-fp8-native-gen20-current-source/ideogram-4-fp8-load.json`. Current ee9 fp8 strict object proof: `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-ideogram-fp8-bb4-exact/ideogram-4-fp8-load.json` (apple/repeat `b5dc1295ddeae0f09d27cbf00d491308ee59492a05ec76e693dda098bfc03495`, mountains `2908dbde1e4e1fbef985460a65e20522db8e20993dd170d1640fae76bf704c9d`; viewed clean). Current ee9 NF4 strict object proof: `docs/local/vmlx-flux-probes/2026-06-16-current-ee9-ideogram-nf4-bb4-exact/ideogram-4-nf4-load.json` (apple/repeat `be4d0e5676f78f464e3aeb1862a9c3f6a18b4197487fc78a4df770c173b611bc`, mountains `f2ed31ec2c65d499cd0a5b958d8a8c853af78d7aea0934468a2cb221180bada6`; viewed clean). Boundary: current 103be seed/order variants with adjacent repeated prompts generated safety-filter-like text cards in `docs/local/vmlx-flux-probes/2026-06-16-current-103be-ideogram-fp8-object-strict/ideogram-4-fp8-load.json` and `docs/local/vmlx-flux-probes/2026-06-16-current-103be-ideogram-nf4-object-strict/ideogram-4-nf4-load.json`; older `docs/local/vmlx-flux-probes/2026-06-16-current-a188-ideogram-fp8-object-determinism/ideogram-4-fp8-load.json` hallucinated text on a broader no-text apple prompt. | Expose staged fp8 and NF4 mirrors for testing; if the product requires official `ideogram-ai/*`, keep official-bundle exposure gated until access is approved. Keep normal UI/API wording scoped to typography and strict object-icon prompt coverage until broader no-text object rows pass; broader Osaurus production matrix still pending. |
 | seedvr2 | scaffold | registered | upscale arch (different family). |
 | wan-2.1 / wan-2.2 | scaffold | full pipeline scaffolded (WanVAE3D + WanDiT + MP4 writer) with random weights. | real weight key-map, real Conv3d (currently a Conv2d shim), windowed attention for >3-4s clips. |
 
@@ -414,35 +411,33 @@ eval hot path).
 ## 7b. Quant matrix (live-proven 2026-06-16) + model-resolution fix
 | Model | 4-bit | 5/6-bit | 8-bit | full |
 |---|---|---|---|---|
-| z-image-turbo | current 103be proven | - | current 103be proven | (not staged) |
-| flux1-schnell | current 103be proven | - | current 103be proven | (not staged) |
-| qwen-image | current 103be 4-bit proven | current 103be 6-bit proven | current da782 8-bit proven | (not staged) |
-| qwen-image-edit | current 103be q4 single-image text edit proven; q3 loadable but hidden due high-noise output; q4 weaker/noisier on shape change | current 103be q5 proven; current ed84 q6 proven clean; q5 multi-image proof is current-source earlier artifact | current ed84 q8 proven clean | (not staged) |
-| ideogram | current 103be staged NF4 mirror proven for strict object-icon prompts | staged fp8 mirror has typography + current 103be strict object-icon proof; broader no-text apple prompt can hallucinate text | official access gated | (not staged) |
-Current 103be proven rows are deterministic (same seed+prompt -> identical),
+| z-image-turbo | current ee9 proven | - | current ee9 proven | (not staged) |
+| flux1-schnell | current ee9 proven | - | current ee9 proven | (not staged) |
+| qwen-image | current ee9 4-bit proven | retained 103be 6-bit proof | current ee9 8-bit proven | (not staged) |
+| qwen-image-edit | current ee9 q4 single-image text edit proven but visibly weaker/noisier; q3 loadable but hidden due high-noise output | retained 103be q5 proof; retained ed84 q6 clean proof; q4/q5 multi-image proof is retained earlier artifact | current ee9 q8 proven clean | (not staged) |
+| ideogram | current ee9 staged NF4 mirror proven for strict object-icon prompts | staged fp8 mirror has typography + current ee9 strict object-icon proof; broader no-text apple prompt can hallucinate text | official access gated | (not staged) |
+Current ee9 refreshed rows are deterministic (same seed+prompt -> identical),
 prompt-sensitive, and coherent in the recorded artifacts. z-image-turbo and
 flux1-schnell 8-bit and 4-bit produce visibly distinct images (genuine quant),
-~3-4s/512px/4-step. qwen-image 4-bit and 6-bit are live-proven on 103be;
-qwen-image 8-bit is live-proven on da782 after staging `AbstractFramework/qwen-image-8bit`
-as `qwen-image-mflux-8bit`. qwen-image-edit q5 and q4 are live-proven on
-103be for single-image text edits; q6 and q8 are live-proven on current ed84
-after staging the missing upstream files; q5/q6/q8 are clean on the blue-apple
-and green-pear rows, while q4 remains visibly noisier/weaker on shape-changing
-green-pear prompts. q3 now loads but remains hidden because viewed q3 output is
-high-noise and not a clean prompt-following edit. Qwen masks remain unsupported
-unless upstream mflux adds a real qwen mask path or a separate fill/inpaint
-model is wired. Staged
-Ideogram fp8 has typography proof plus current 103be strict object-icon proof;
-staged NF4 is live-proven on 103be for strict object-icon prompts. Current 103be
-seed/order boundary probes with adjacent repeated prompts generated
-safety-filter-like text cards, and a broader a188 fp8 no-text apple prompt
-hallucinated text, so keep broader object-renderer wording hidden; official
-`ideogram-ai/*` access remains a separate blocker if official bundles are
-required.
+~4-5s/512px in this refresh. qwen-image 4-bit and 8-bit are live-proven on
+ee9; qwen-image 8-bit remains staged from `AbstractFramework/qwen-image-8bit`
+as `qwen-image-mflux-8bit`. qwen-image-edit q4 and q8 are live-proven on ee9
+using the current qwen-image 8-bit apple output as the source; q8 is clean on
+the blue-apple and green-pear rows, while q4 remains visibly noisier/weaker on
+shape-changing green-pear prompts. q3 now loads but remains hidden because
+viewed q3 output is high-noise and not a clean prompt-following edit. Qwen masks
+remain unsupported unless upstream mflux adds a real qwen mask path or a separate
+fill/inpaint model is wired. Staged Ideogram fp8 has typography proof plus
+current ee9 strict object-icon proof; staged NF4 is live-proven on ee9 for
+strict object-icon prompts. Current 103be seed/order boundary probes with
+adjacent repeated prompts generated safety-filter-like text cards, and a broader
+a188 fp8 no-text apple prompt hallucinated text, so keep broader object-renderer
+wording hidden; official `ideogram-ai/*` access remains a separate blocker if
+official bundles are required.
 
-Runtime-proof refresh after the latest main image pipeline baselines:
+Retained historical runtime-proof refresh after the earlier main image pipeline baselines:
 `vmlx-origin/main` `103be4375d88f7f8249b39853feedcf390d41465` was rebuilt and
-live-probed from `/Users/eric/vmlx-swift-fluxwt`. Current 103be artifacts:
+live-probed from `/Users/eric/vmlx-swift-fluxwt`. Historical 103be artifacts:
 `docs/local/vmlx-flux-probes/2026-06-16-current-103be-load-matrix/`,
 `docs/local/vmlx-flux-probes/2026-06-16-current-103be-zimage-4bit-gen/`,
 `docs/local/vmlx-flux-probes/2026-06-16-current-103be-zimage-8bit-gen/`,
