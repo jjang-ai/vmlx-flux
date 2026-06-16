@@ -66,6 +66,16 @@ public struct MLXStudioModelStore: Sendable {
     public func resolve(name: String) throws -> LocalFluxModel? {
         let requestedDirectory = Self.normalizedName(name)
         let models = try scan()
+        // 1. Literal, case-insensitive directory-name match FIRST — this preserves the
+        //    `-4bit`/`-8bit` quant suffix so requesting an exact bundle (e.g.
+        //    "FLUX.1-schnell-mflux-8bit") never collapses onto a different-quant sibling
+        //    ("...-4bit"), which `normalizedName` would do (it strips the bit suffix).
+        if let literal = models.first(where: {
+            $0.directoryName.compare(name, options: .caseInsensitive) == .orderedSame
+        }) {
+            return literal
+        }
+        // 2. Normalized exact match (quant-insensitive, separator-insensitive).
         if let exact = models.first(where: {
             Self.normalizedName($0.directoryName) == requestedDirectory
         }) {

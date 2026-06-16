@@ -252,6 +252,26 @@ eval hot path).
 
 ---
 
+## 7b. Quant matrix (live-proven 2026-06-15) + model-resolution fix
+| Model | 4-bit | 8-bit | full |
+|---|---|---|---|
+| z-image-turbo | ✅ proven | ✅ proven | (not staged) |
+| flux1-schnell | ✅ proven | ✅ proven | (not staged) |
+Each: deterministic (same seed+prompt→identical), prompt-sensitive, coherent. The
+8-bit and 4-bit produce visibly distinct images (genuine quant), ~3-4s/512px/4-step.
+
+**Model-resolution bug fixed:** `MLXStudioModelStore.resolve(name:)` normalized away the
+`-Nbit` suffix, so requesting `...-8bit` collapsed onto a co-installed `...-4bit` dir
+(loaded the wrong quant). Fixed by adding a literal case-insensitive directory-name match
+FIRST. **osaurus must request the exact bundle directory name** (or canonical+quant) — if a
+user has both 4-bit and 8-bit of a model installed, exact-name resolution is required.
+
+**Tokenizer staging (flux/qwen):** mflux bundles ship SLOW tokenizers (CLIP vocab.json+
+merges.txt; T5 spiece.model); swift-transformers needs `tokenizer.json`. Convert once via
+`transformers` (`AutoTokenizer.from_pretrained(dir, use_fast=True).save_pretrained(dir)`) for
+`tokenizer/` and `tokenizer_2/`. z-image ships tokenizer.json already. osaurus download/stage
+must ensure tokenizer.json exists.
+
 ## 8. Sandbox / cache / memory notes for osaurus
 
 - **No silent downloads.** `FluxEngine.load` needs a staged local dir. Wire
