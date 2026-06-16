@@ -11,23 +11,25 @@ field below maps to an engine request/event — see the mapping notes. This is t
 contract osaurus implements server-side and the UI builds against.
 
 > Status: the engine is real on Osaurus `vmlx-origin/main` runtime-proof
-> baseline `a188a2ccecc92c8a5993506acc83df16f83c7420`. Fresh live proof exists
-> for `z-image-turbo` 4/8-bit, `flux1-schnell` 4/8-bit, `qwen-image` 4/6-bit,
-> `qwen-image-edit` q4/q5, staged `ideogram-4-fp8`, and staged
-> `ideogram-4-nf4`. Load matrix:
-> `docs/local/vmlx-flux-probes/2026-06-16-current-a188-load-matrix/compatibility-matrix.json`.
-> Generation/edit artifact roots:
-> `docs/local/vmlx-flux-probes/2026-06-16-current-a188-zimage-4bit-gen/`,
-> `2026-06-16-current-a188-zimage-8bit-gen/`,
-> `2026-06-16-current-a188-flux-schnell-4bit-gen/`,
-> `2026-06-16-current-a188-flux-schnell-8bit-gen/`,
-> `2026-06-16-current-a188-qwen-image-4bit-gen20/`,
+> baseline `5c7cf42caa7e010e68828c277dc9e67bd3404650`. Current-head load proof
+> exists for all local loadable image rows at
+> `docs/local/vmlx-flux-probes/2026-06-16-current-5c7-load-matrix/compatibility-matrix.json`.
+> Current-head live generation/edit proof exists for `z-image-turbo` 4/8-bit,
+> `flux1-schnell` 4/8-bit, `qwen-image` 4-bit, `qwen-image-edit` q5, and staged
+> `ideogram-4-nf4`. Current 5c7 generation/edit artifact roots:
+> `docs/local/vmlx-flux-probes/2026-06-16-current-5c7-zimage-4bit-gen/`,
+> `2026-06-16-current-5c7-zimage-8bit-gen/`,
+> `2026-06-16-current-5c7-flux-schnell-4bit-gen/`,
+> `2026-06-16-current-5c7-flux-schnell-8bit-gen/`,
+> `2026-06-16-current-5c7-qwen-image-4bit-gen20/`,
+> `2026-06-16-current-5c7-qwen-edit-q5-gen20/`, and
+> `2026-06-16-ideogram-nf4-strict-object/`.
+> Older a188 generation proof still covers `qwen-image` 6-bit,
+> `qwen-image-edit` q4, and staged `ideogram-4-fp8` until those rows are rerun
+> on 5c7:
 > `2026-06-16-current-a188-qwen-image-6bit-gen20/`,
-> `2026-06-16-current-a188-qwen-edit-q4-gen20/`,
-> `2026-06-16-current-a188-qwen-edit-q5-gen20/`, and
+> `2026-06-16-current-a188-qwen-edit-q4-gen20/`, and
 > `2026-06-16-current-a188-ideogram-fp8-object-strict/`.
-> NF4 follow-up artifact:
-> `docs/local/vmlx-flux-probes/2026-06-16-ideogram-nf4-strict-object/`.
 > Expose only proven local variants for normal testing. Keep qwen-edit q3
 > blocked because its text-encoder index references missing
 > `text_encoder/3.safetensors`; keep q6 blocked until its local bundle is
@@ -41,7 +43,7 @@ contract osaurus implements server-side and the UI builds against.
 > `76cd995b90d4ad85140418ae1d3a8a44bc688d03840041ff93ff2cd006e748df`,
 > mountains SHA
 > `302ffe06596c718df6a118a56bcc0e8ec7437edee1dc9ba1656d0cd5d2052425`.
-> Boundary: a broader current-a188 fp8 "no text" apple prompt hallucinated
+> Boundary: a broader a188 fp8 "no text" apple prompt hallucinated
 > text, so do not present Ideogram as a general clean object renderer yet.
 > Official `ideogram-ai/*` downloads still require approval for the current
 > account (`hf download ... --dry-run` returned access denied for both fp8 and
