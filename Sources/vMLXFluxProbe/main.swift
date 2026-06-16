@@ -146,6 +146,7 @@ struct VMLXFluxProbe {
             "started_at": isoTimestamp(startedAt),
             "generate_requested": options.generate,
             "edit_requested": options.edit,
+            "qwen_edit_prompt_requested": options.qwenEditPrompt,
             "qwen_edit_conditioning_requested": options.qwenEditConditioning,
             "turns": options.turns,
             "width": options.width,
@@ -333,6 +334,49 @@ struct VMLXFluxProbe {
                     "latents_stats": mlxStats(conditioning.latents),
                     "image_ids_stats": mlxStats(conditioning.imageIDs),
                 ]
+            }
+
+            if options.qwenEditPrompt {
+                guard let sourceImage = options.sourceImage else {
+                    throw ProbeError("--qwen-edit-prompt requires --source-image")
+                }
+                guard local.canonicalName == "qwen-image-edit" else {
+                    throw ProbeError("--qwen-edit-prompt requires a qwen-image-edit model")
+                }
+                let plan = try QwenImageEditPreprocessPlan(
+                    sourceImage: sourceImage,
+                    requestedWidth: options.widthExplicit ? options.width : nil,
+                    requestedHeight: options.heightExplicit ? options.height : nil,
+                    steps: options.steps,
+                    guidance: options.guidance ?? 4.0)
+                let visionInput = try QwenImageEditPreprocessor.visionInput(
+                    sourceImage: sourceImage,
+                    plan: plan)
+                let tokenizer = try await QwenImageEditPromptTokenizer(modelPath: local.directory)
+                var promptRecords: [[String: Any]] = []
+                for prompt in options.turns {
+                    let promptInput = try QwenImageEditPreprocessor.visionLanguagePrompt(
+                        prompt: prompt,
+                        imageTokenCounts: [visionInput.imageTokenCount])
+                    let tokens = tokenizer.tokenize(promptInput)
+                    guard tokens.imageTokenCount == visionInput.imageTokenCount else {
+                        throw ProbeError(
+                            "qwen edit prompt image token count mismatch: got \(tokens.imageTokenCount), expected \(visionInput.imageTokenCount)")
+                    }
+                    promptRecords.append([
+                        "status": "tokenized",
+                        "prompt": prompt,
+                        "sequence_length": tokens.sequenceLength,
+                        "input_ids_shape": tokens.inputIDs.shape,
+                        "attention_mask_shape": tokens.attentionMask.shape,
+                        "image_token_id": QwenImageEditPreprocessor.imageTokenID,
+                        "image_token_count": tokens.imageTokenCount,
+                        "expected_image_token_count": visionInput.imageTokenCount,
+                        "template_drop_index": tokens.templateDropIndex,
+                        "image_grid_thw": visionInput.imageGridTHW,
+                    ])
+                }
+                payload["qwen_edit_prompt_tokens"] = promptRecords
             }
         } catch {
             payload["load_status"] = "failed"
@@ -565,6 +609,7 @@ struct ProbeOptions {
     var load = false
     var generate = false
     var edit = false
+    var qwenEditPrompt = false
     var qwenEditConditioning = false
     var json = false
     var width = 256
@@ -603,6 +648,9 @@ struct ProbeOptions {
                 load = true
             case "--edit":
                 edit = true
+                load = true
+            case "--qwen-edit-prompt":
+                qwenEditPrompt = true
                 load = true
             case "--qwen-edit-conditioning":
                 qwenEditConditioning = true

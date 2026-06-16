@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import MLX
+import Tokenizers
 import vMLXFluxKit
 
 public struct QwenImageEditPreprocessPlan: Sendable {
@@ -117,6 +118,20 @@ public struct QwenImageEditVisionInput {
     }
 }
 
+public struct QwenImageEditPromptInput {
+    public let formattedText: String
+    public let imageTokenCounts: [Int]
+    public let templateDropIndex: Int
+}
+
+public struct QwenImageEditPromptTokens {
+    public let inputIDs: MLXArray
+    public let attentionMask: MLXArray
+    public let sequenceLength: Int
+    public let imageTokenCount: Int
+    public let templateDropIndex: Int
+}
+
 public struct QwenImageEditVAEInput {
     public let tensor: MLXArray
 }
@@ -132,6 +147,41 @@ public enum QwenImageEditPreprocessor {
     public static let patchSize = 14
     public static let temporalPatchSize = 2
     public static let mergeSize = 2
+    public static let editTemplateStartIndex = 64
+    public static let imagePadToken = "<|image_pad|>"
+    public static let imageTokenID: Int32 = 151655
+
+    public static func visionLanguagePrompt(
+        prompt: String,
+        imageTokenCounts: [Int]
+    ) throws -> QwenImageEditPromptInput {
+        guard !imageTokenCounts.isEmpty else {
+            throw FluxError.invalidRequest("Qwen edit prompt requires at least one source image")
+        }
+        for count in imageTokenCounts where count <= 0 {
+            throw FluxError.invalidRequest("Qwen edit image token counts must be positive")
+        }
+
+        let imagePrompts = imageTokenCounts.enumerated().map { index, count in
+            "Picture \(index + 1): <|vision_start|>"
+                + String(repeating: imagePadToken, count: count)
+                + "<|vision_end|>"
+        }.joined()
+        let formatted = "<|im_start|>system\n"
+            + "Describe the key features of the input image (color, shape, size, texture, objects, background), "
+            + "then explain how the user's text instruction should alter or modify the image. "
+            + "Generate a new image that meets the user's requirements while maintaining consistency "
+            + "with the original input where appropriate.<|im_end|>\n"
+            + "<|im_start|>user\n"
+            + imagePrompts
+            + prompt
+            + "<|im_end|>\n"
+            + "<|im_start|>assistant\n"
+        return QwenImageEditPromptInput(
+            formattedText: formatted,
+            imageTokenCounts: imageTokenCounts,
+            templateDropIndex: editTemplateStartIndex)
+    }
 
     public static func visionInput(
         sourceImage: URL,
@@ -272,6 +322,31 @@ public enum QwenImageEditPreprocessor {
             }
         }
         return values
+    }
+}
+
+public final class QwenImageEditPromptTokenizer {
+    private let tok: any Tokenizers.Tokenizer
+
+    public init(modelPath: URL) async throws {
+        tok = try await AutoTokenizer.from(
+            modelFolder: modelPath.appendingPathComponent("tokenizer"),
+            strict: false)
+    }
+
+    public func tokenize(_ prompt: QwenImageEditPromptInput) -> QwenImageEditPromptTokens {
+        let ids = tok.encode(text: prompt.formattedText, addSpecialTokens: false)
+        let inputIDs = MLXArray(ids.map(Int32.init)).reshaped([1, ids.count])
+        let attentionMask = MLXArray([Int32](repeating: 1, count: ids.count)).reshaped([1, ids.count])
+        let imageTokens = ids.reduce(0) { count, id in
+            count + (Int32(id) == QwenImageEditPreprocessor.imageTokenID ? 1 : 0)
+        }
+        return QwenImageEditPromptTokens(
+            inputIDs: inputIDs,
+            attentionMask: attentionMask,
+            sequenceLength: ids.count,
+            imageTokenCount: imageTokens,
+            templateDropIndex: prompt.templateDropIndex)
     }
 }
 

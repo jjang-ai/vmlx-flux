@@ -112,6 +112,21 @@ final class QwenImageEditSupportTests: XCTestCase {
         XCTAssertEqual(values[14 * 14 * 4], blue, accuracy: 0.001)
     }
 
+    func testVisionLanguagePromptExpandsImagePadTokensAndKeepsEditDropIndex() throws {
+        let prompt = try QwenImageEditPreprocessor.visionLanguagePrompt(
+            prompt: "make the background blue",
+            imageTokenCounts: [196])
+
+        XCTAssertEqual(prompt.templateDropIndex, 64)
+        XCTAssertEqual(prompt.imageTokenCounts, [196])
+        XCTAssertTrue(prompt.formattedText.contains("<|im_start|>system\nDescribe the key features of the input image"))
+        XCTAssertTrue(prompt.formattedText.contains("<|im_start|>user\nPicture 1: <|vision_start|>"))
+        XCTAssertTrue(prompt.formattedText.contains("<|vision_end|>make the background blue<|im_end|>"))
+        XCTAssertEqual(
+            prompt.formattedText.components(separatedBy: "<|image_pad|>").count - 1,
+            196)
+    }
+
     func testVAEInputUsesMinusOneToOneNCHWAtConditioningSize() throws {
         let source = try makePNG(width: 512, height: 512, rgba: (255, 128, 0, 255))
         let plan = try QwenImageEditPreprocessPlan(
