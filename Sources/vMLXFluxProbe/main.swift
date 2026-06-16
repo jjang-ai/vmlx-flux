@@ -148,6 +148,7 @@ struct VMLXFluxProbe {
             "edit_requested": options.edit,
             "qwen_edit_prompt_requested": options.qwenEditPrompt,
             "qwen_edit_conditioning_requested": options.qwenEditConditioning,
+            "qwen_edit_vision_requested": options.qwenEditVision,
             "turns": options.turns,
             "width": options.width,
             "height": options.height,
@@ -377,6 +378,48 @@ struct VMLXFluxProbe {
                     ])
                 }
                 payload["qwen_edit_prompt_tokens"] = promptRecords
+            }
+
+            if options.qwenEditVision {
+                guard let sourceImage = options.sourceImage else {
+                    throw ProbeError("--qwen-edit-vision requires --source-image")
+                }
+                guard local.canonicalName == "qwen-image-edit" else {
+                    throw ProbeError("--qwen-edit-vision requires a qwen-image-edit model")
+                }
+                let plan = try QwenImageEditPreprocessPlan(
+                    sourceImage: sourceImage,
+                    requestedWidth: options.widthExplicit ? options.width : nil,
+                    requestedHeight: options.heightExplicit ? options.height : nil,
+                    steps: options.steps,
+                    guidance: options.guidance ?? 4.0)
+                var encodingRecords: [[String: Any]] = []
+                for prompt in options.turns {
+                    let visionStart = Date()
+                    let encoding = try await QwenImageEditPromptImageEncoder.encode(
+                        modelPath: local.directory,
+                        sourceImage: sourceImage,
+                        prompt: prompt,
+                        plan: plan)
+                    encodingRecords.append([
+                        "status": "encoded",
+                        "elapsed_seconds": Date().timeIntervalSince(visionStart),
+                        "prompt": prompt,
+                        "image_grid_thw": encoding.features.imageGridTHW,
+                        "feature_shape": encoding.features.imageFeatures.shape,
+                        "feature_stats": mlxStats(encoding.features.imageFeatures),
+                        "image_token_count": encoding.features.imageTokenCount,
+                        "token_sequence_length": encoding.tokens.sequenceLength,
+                        "token_image_count": encoding.tokens.imageTokenCount,
+                        "template_drop_index": encoding.tokens.templateDropIndex,
+                        "prompt_embeds_shape": encoding.promptEmbeddings.promptEmbeds.shape,
+                        "prompt_mask_shape": encoding.promptEmbeddings.attentionMask.shape,
+                        "prompt_embeds_stats": mlxStats(encoding.promptEmbeddings.promptEmbeds),
+                        "prompt_mask_stats": mlxStats(encoding.promptEmbeddings.attentionMask),
+                        "matches_features": encoding.tokens.imageTokenCount == encoding.features.imageTokenCount,
+                    ])
+                }
+                payload["qwen_edit_vision_language"] = encodingRecords
             }
         } catch {
             payload["load_status"] = "failed"
@@ -611,6 +654,7 @@ struct ProbeOptions {
     var edit = false
     var qwenEditPrompt = false
     var qwenEditConditioning = false
+    var qwenEditVision = false
     var json = false
     var width = 256
     var height = 256
@@ -654,6 +698,9 @@ struct ProbeOptions {
                 load = true
             case "--qwen-edit-conditioning":
                 qwenEditConditioning = true
+                load = true
+            case "--qwen-edit-vision":
+                qwenEditVision = true
                 load = true
             case "--no-generate":
                 generate = false

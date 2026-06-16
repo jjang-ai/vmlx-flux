@@ -50,16 +50,60 @@ final class QwenTextEncoder {
     /// inputIds (1, seq) Int32 → prompt embeds (1, seq-dropIdx, 3584).
     func callAsFunction(_ inputIds: MLXArray) -> MLXArray {
         let seq = inputIds.dim(1)
-        var h = embedTokens(inputIds)
+        let h = encode(inputEmbeddings: embedTokens(inputIds), sequenceLength: seq)
+        // drop the template prefix → prompt conditioning.
+        let keep = max(0, seq - dropIdx)
+        return h[0..., dropIdx ..< (dropIdx + keep), 0...]
+    }
+
+    func encodeVisionLanguage(
+        inputIDs: MLXArray,
+        attentionMask: MLXArray,
+        imageFeatures: QwenImageEditVisionFeatures,
+        templateDropIndex: Int
+    ) throws -> QwenImageEditPromptEmbeddings {
+        let seq = inputIDs.dim(1)
+        let ids = inputIDs.asArray(Int32.self)
+        let imageTokenCount = ids.reduce(0) { count, id in
+            count + (id == QwenImageEditPreprocessor.imageTokenID ? 1 : 0)
+        }
+        try imageFeatures.validateMatches(promptImageTokenCount: imageTokenCount)
+
+        let tokenEmbeds = embedTokens(inputIDs)
+        var pieces: [MLXArray] = []
+        pieces.reserveCapacity(seq)
+        var imageIndex = 0
+        for index in 0 ..< seq {
+            if ids[index] == QwenImageEditPreprocessor.imageTokenID {
+                pieces.append(imageFeatures.imageFeatures[imageIndex, 0...])
+                imageIndex += 1
+            } else {
+                pieces.append(tokenEmbeds[0, index, 0...])
+            }
+        }
+        let inputEmbeddings = stacked(pieces, axis: 0).reshaped([1, seq, QwenTextEncoder.hidden])
+        let hidden = encode(inputEmbeddings: inputEmbeddings, sequenceLength: seq)
+        let validLength = max(0, min(seq, attentionMask.asArray(Int32.self).reduce(0) { $0 + Int($1) }))
+        let keep = max(0, validLength - templateDropIndex)
+        let promptEmbeds = hidden[0..., templateDropIndex ..< (templateDropIndex + keep), 0...]
+        let promptMask = MLXArray([Int32](repeating: 1, count: keep)).reshaped([1, keep])
+        let result = QwenImageEditPromptEmbeddings(
+            promptEmbeds: promptEmbeds,
+            attentionMask: promptMask,
+            templateDropIndex: templateDropIndex,
+            sourceSequenceLength: validLength)
+        try result.validate()
+        return result
+    }
+
+    private func encode(inputEmbeddings: MLXArray, sequenceLength seq: Int) -> MLXArray {
+        var h = inputEmbeddings
         let (cos, sin) = QwenTextEncoder.ropeCosSin(seq: seq, dtype: h.dtype)
         let mask = QwenTextEncoder.causalMask(seq: seq, dtype: h.dtype)
         for layer in layers {
             h = layer(h, cos: cos, sin: sin, mask: mask)
         }
-        h = finalNorm(h)
-        // drop the template prefix → prompt conditioning.
-        let keep = max(0, seq - dropIdx)
-        return h[0..., dropIdx ..< (dropIdx + keep), 0...]
+        return finalNorm(h)
     }
 
     /// Standard RoPE cos/sin, (seq, headDim).

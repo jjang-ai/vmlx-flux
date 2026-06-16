@@ -62,23 +62,34 @@
   `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-prompt-live/Qwen-Image-Edit-mflux-q4-load.json`
   with `load_status=loaded`, `input_ids_shape=1x276`,
   `image_token_id=151655`, `image_token_count=196`, expected count `196`, and
-  `template_drop_index=64`. This proves tokenization only; the Qwen2.5-VL
-  vision transformer and hidden-state splice remain pending.
+  `template_drop_index=64`.
+- **Qwen-Image-Edit Qwen2.5-VL encode boundary:** added the real mflux-shaped
+  Qwen2.5-VL vision transformer (patch projection, rotary/windowed 32-block
+  tower, patch merger to 3584 hidden size) plus image-feature splice into the
+  Qwen text encoder at `image_token_id=151655`, with post-template drop index
+  64. Added probe `--qwen-edit-vision`; live q4 artifact:
+  `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-vl-encode-live/Qwen-Image-Edit-mflux-q4-load.json`
+  with `load_status=loaded`, `feature_shape=196x3584`,
+  `token_image_count=196`, `prompt_embeds_shape=1x212x3584`,
+  `prompt_mask_shape=1x212`, and finite min/mean/max stats. This proves the
+  prompt-image encode boundary only; transformer latent concat, denoise loop,
+  decode, and edited PNG output remain pending.
 - **Qwen-Edit guardrail tests:** red test first caught the previous fake load
   (`QwenImageEdit` accepted a bundle missing vision tower keys). After the
   validator landed,
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter vMLXFluxTests.RegistryTests/testQwenImageEdit`
   passed 3 tests. The new
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter vMLXFluxTests.QwenImageEditSupportTests`
-  preprocess/edit-boundary suite now passes 10 tests, including Qwen-VL patch
-  shape/normalization, VAE input tensor shape/range, and static conditioning
+  preprocess/edit-boundary suite now passes 12 tests, including Qwen-VL patch
+  shape/normalization, prompt-token expansion, VL feature/prompt-embedding
+  shape contracts, VAE input tensor shape/range, and static conditioning
   latent pack/image-ID order. Full
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` passes
-  33 tests.
+  35 tests.
 - **Probe metadata fixed:** scan JSON now reports `native_pipeline_implemented`
   for `z-image-turbo`, `flux1-schnell`, and `qwen-image`; `qwen-image-edit`
-  remains `not_implemented` with blockers for the missing Qwen2.5-VL vision
-  encoder, transformer latent concat/denoise loop, and live edited-image proof.
+  remains `not_implemented` with blockers for transformer latent
+  concat/denoise loop, decode, and live edited-image proof.
 
 ### 2026-06-15 — native Z-Image proven + vendored into vmlx-swift
 - **`ZImageNative.swift` (NEW, 1202 lines)**: full native Z-Image-Turbo pipeline —

@@ -146,7 +146,9 @@ for try await event in engine.generate(request) {
   `vision_patches=784x1176`, `vision_grid=1x28x28`, and
   `vae_input=1x3x1024x1024`. Separate q4 probes now prove mflux edit
   prompt-token expansion (`input_ids_shape=1x276`, `image_token_count=196`,
-  `template_drop_index=64`) and source-image VAE conditioning
+  `template_drop_index=64`), Qwen2.5-VL prompt-image encoding
+  (`feature_shape=196x3584`, `prompt_embeds_shape=1x212x3584`, finite stats),
+  and source-image VAE conditioning
   (`latents_shape=1x4096x64`, `image_ids_shape=1x4096x3`, finite stats). This is
   still `PARTIAL`; no edited image is generated yet.
 
@@ -163,6 +165,8 @@ edit-preprocess proof at
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-preprocess-live/`,
 prompt-token proof at
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-prompt-live/`, plus
+VL encode proof at
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-vl-encode-live/`, plus
 VAE-conditioning proof at
 `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-conditioning-live/`. Their
 remaining ports need:

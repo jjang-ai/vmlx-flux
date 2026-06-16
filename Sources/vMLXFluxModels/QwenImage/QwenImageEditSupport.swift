@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import MLX
+import MLXNN
 import Tokenizers
 import vMLXFluxKit
 
@@ -130,6 +131,80 @@ public struct QwenImageEditPromptTokens {
     public let sequenceLength: Int
     public let imageTokenCount: Int
     public let templateDropIndex: Int
+}
+
+public struct QwenImageEditVisionFeatures {
+    public let imageFeatures: MLXArray
+    public let imageGridTHW: [Int]
+
+    public var imageTokenCount: Int { imageFeatures.dim(0) }
+    public var hiddenSize: Int { imageFeatures.dim(1) }
+
+    public init(imageFeatures: MLXArray, imageGridTHW: [Int]) {
+        self.imageFeatures = imageFeatures
+        self.imageGridTHW = imageGridTHW
+    }
+
+    public func validateMatches(promptImageTokenCount: Int) throws {
+        guard imageGridTHW.count == 3 else {
+            throw FluxError.invalidRequest("Qwen edit vision grid must be [t,h,w]")
+        }
+        let expected = try QwenImageEditVisionTransformer.mergedTokenCount(imageGridTHW: imageGridTHW)
+        guard imageTokenCount == expected else {
+            throw FluxError.invalidRequest(
+                "Qwen edit vision feature count \(imageTokenCount) does not match grid-derived count \(expected)")
+        }
+        guard imageTokenCount == promptImageTokenCount else {
+            throw FluxError.invalidRequest(
+                "Qwen edit vision feature count \(imageTokenCount) does not match prompt image tokens \(promptImageTokenCount)")
+        }
+        guard hiddenSize == QwenTextEncoder.hidden else {
+            throw FluxError.invalidRequest(
+                "Qwen edit vision hidden size \(hiddenSize) does not match Qwen text hidden size \(QwenTextEncoder.hidden)")
+        }
+    }
+}
+
+public struct QwenImageEditPromptEmbeddings {
+    public let promptEmbeds: MLXArray
+    public let attentionMask: MLXArray
+    public let templateDropIndex: Int
+    public let sourceSequenceLength: Int
+
+    public var sequenceLength: Int { promptEmbeds.dim(1) }
+    public var hiddenSize: Int { promptEmbeds.dim(2) }
+
+    public init(
+        promptEmbeds: MLXArray,
+        attentionMask: MLXArray,
+        templateDropIndex: Int,
+        sourceSequenceLength: Int
+    ) {
+        self.promptEmbeds = promptEmbeds
+        self.attentionMask = attentionMask
+        self.templateDropIndex = templateDropIndex
+        self.sourceSequenceLength = sourceSequenceLength
+    }
+
+    public func validate() throws {
+        guard promptEmbeds.ndim == 3, promptEmbeds.dim(0) == 1 else {
+            throw FluxError.invalidRequest("Qwen edit prompt embeds must have shape [1,seq,hidden]")
+        }
+        guard attentionMask.shape == [1, sequenceLength] else {
+            throw FluxError.invalidRequest(
+                "Qwen edit prompt mask shape \(attentionMask.shape) does not match embeds sequence \(sequenceLength)")
+        }
+        guard sourceSequenceLength >= templateDropIndex,
+              sequenceLength == sourceSequenceLength - templateDropIndex
+        else {
+            throw FluxError.invalidRequest(
+                "Qwen edit prompt sequence \(sequenceLength) does not match source \(sourceSequenceLength) minus template drop \(templateDropIndex)")
+        }
+        guard hiddenSize == QwenTextEncoder.hidden else {
+            throw FluxError.invalidRequest(
+                "Qwen edit prompt hidden size \(hiddenSize) does not match Qwen text hidden size \(QwenTextEncoder.hidden)")
+        }
+    }
 }
 
 public struct QwenImageEditVAEInput {
@@ -365,5 +440,379 @@ public enum QwenImageEditConditioner {
             encodedLatents: encoded,
             height: plan.vaeHeight,
             width: plan.vaeWidth)
+    }
+}
+
+public enum QwenImageEditVisionFeatureEncoder {
+    public static func encode(
+        modelPath: URL,
+        sourceImage: URL,
+        plan: QwenImageEditPreprocessPlan
+    ) throws -> QwenImageEditVisionFeatures {
+        let store = MFluxStore(try WeightLoader.load(from: modelPath))
+        let vision = try QwenImageEditVisionTransformer(store: store)
+        let input = try QwenImageEditPreprocessor.visionInput(sourceImage: sourceImage, plan: plan)
+        let features = vision(pixelValues: input.pixelValues, imageGridTHW: input.imageGridTHW)
+        eval(features)
+        let result = QwenImageEditVisionFeatures(
+            imageFeatures: features,
+            imageGridTHW: input.imageGridTHW)
+        try result.validateMatches(promptImageTokenCount: input.imageTokenCount)
+        return result
+    }
+}
+
+public struct QwenImageEditVisionLanguageEncoding {
+    public let features: QwenImageEditVisionFeatures
+    public let tokens: QwenImageEditPromptTokens
+    public let promptEmbeddings: QwenImageEditPromptEmbeddings
+}
+
+public enum QwenImageEditPromptImageEncoder {
+    public static func encode(
+        modelPath: URL,
+        sourceImage: URL,
+        prompt: String,
+        plan: QwenImageEditPreprocessPlan
+    ) async throws -> QwenImageEditVisionLanguageEncoding {
+        let store = MFluxStore(try WeightLoader.load(from: modelPath))
+        let vision = try QwenImageEditVisionTransformer(store: store)
+        let text = try QwenTextEncoder(store: store, dropIdx: QwenImageEditPreprocessor.editTemplateStartIndex)
+        let tokenizer = try await QwenImageEditPromptTokenizer(modelPath: modelPath)
+        let visionInput = try QwenImageEditPreprocessor.visionInput(sourceImage: sourceImage, plan: plan)
+        let imageFeatures = vision(
+            pixelValues: visionInput.pixelValues,
+            imageGridTHW: visionInput.imageGridTHW)
+        eval(imageFeatures)
+        let features = QwenImageEditVisionFeatures(
+            imageFeatures: imageFeatures,
+            imageGridTHW: visionInput.imageGridTHW)
+        try features.validateMatches(promptImageTokenCount: visionInput.imageTokenCount)
+
+        let promptInput = try QwenImageEditPreprocessor.visionLanguagePrompt(
+            prompt: prompt,
+            imageTokenCounts: [features.imageTokenCount])
+        let tokens = tokenizer.tokenize(promptInput)
+        try features.validateMatches(promptImageTokenCount: tokens.imageTokenCount)
+        let promptEmbeddings = try text.encodeVisionLanguage(
+            inputIDs: tokens.inputIDs,
+            attentionMask: tokens.attentionMask,
+            imageFeatures: features,
+            templateDropIndex: tokens.templateDropIndex)
+        eval(promptEmbeddings.promptEmbeds, promptEmbeddings.attentionMask)
+        return QwenImageEditVisionLanguageEncoding(
+            features: features,
+            tokens: tokens,
+            promptEmbeddings: promptEmbeddings)
+    }
+}
+
+final class QwenImageEditVisionTransformer {
+    private static let patchSize = 14
+    private static let temporalPatchSize = 2
+    private static let inChannels = 3
+    private static let embedDim = 1280
+    private static let depth = 32
+    private static let heads = 16
+    private static let headDim = 80
+    private static let mlpHidden = 3420
+    private static let spatialMergeSize = 2
+    private static let windowSize = 112
+    private static let fullAttentionBlocks: Set<Int> = [7, 15, 23, 31]
+    private static let spatialMergeUnit = spatialMergeSize * spatialMergeSize
+
+    private let patchEmbed: QwenEditVisionPatchEmbed
+    private let blocks: [QwenEditVisionBlock]
+    private let merger: QwenEditPatchMerger
+
+    init(store: MFluxStore) throws {
+        patchEmbed = try QwenEditVisionPatchEmbed(store: store)
+        blocks = try (0 ..< Self.depth).map { try QwenEditVisionBlock(store: store, index: $0) }
+        merger = try QwenEditPatchMerger(store: store)
+    }
+
+    static func mergedTokenCount(imageGridTHW: [Int]) throws -> Int {
+        guard imageGridTHW.count == 3 else {
+            throw FluxError.invalidRequest("Qwen edit vision grid must be [t,h,w]")
+        }
+        let product = imageGridTHW.reduce(1, *)
+        guard product > 0, product % spatialMergeUnit == 0 else {
+            throw FluxError.invalidRequest("Qwen edit vision grid product must be positive and divisible by \(spatialMergeUnit)")
+        }
+        return product / spatialMergeUnit
+    }
+
+    func callAsFunction(pixelValues: MLXArray, imageGridTHW: [Int]) -> MLXArray {
+        var hidden = patchEmbed(pixelValues)
+        let (windowIndex, cuWindowSeqlens, cuSeqlens) = Self.windowIndexAndSeqlens(imageGridTHW: imageGridTHW)
+        let (cos, sin) = Self.rotaryPositionEmbeddings(imageGridTHW: imageGridTHW, dtype: hidden.dtype)
+
+        let seqLen = hidden.dim(0)
+        let groupCount = seqLen / Self.spatialMergeUnit
+        let indexArray = MLXArray(windowIndex)
+        hidden = hidden.reshaped([groupCount, Self.spatialMergeUnit, Self.embedDim])
+        hidden = hidden[indexArray, 0..., 0...].reshaped([seqLen, Self.embedDim])
+
+        for (index, block) in blocks.enumerated() {
+            let seqlens = Self.fullAttentionBlocks.contains(index) ? cuSeqlens : cuWindowSeqlens
+            hidden = block(hidden, cos: cos, sin: sin, cuSeqlens: seqlens)
+        }
+
+        hidden = merger(hidden)
+        let reverse = argSort(indexArray)
+        return hidden[reverse, 0...]
+    }
+
+    private static func rotaryPositionEmbeddings(imageGridTHW: [Int], dtype: DType) -> (MLXArray, MLXArray) {
+        let t = imageGridTHW[0]
+        let h = imageGridTHW[1]
+        let w = imageGridTHW[2]
+        let mergeH = h / spatialMergeSize
+        let mergeW = w / spatialMergeSize
+        var positionIDs: [(Int, Int)] = []
+        positionIDs.reserveCapacity(t * h * w)
+        for _ in 0 ..< t {
+            for blockH in 0 ..< mergeH {
+                for blockW in 0 ..< mergeW {
+                    for mergeHIndex in 0 ..< spatialMergeSize {
+                        for mergeWIndex in 0 ..< spatialMergeSize {
+                            positionIDs.append((
+                                blockH * spatialMergeSize + mergeHIndex,
+                                blockW * spatialMergeSize + mergeWIndex))
+                        }
+                    }
+                }
+            }
+        }
+
+        let rotaryDim = headDim / 2
+        let maxGrid = max(h, w)
+        let invFreq = stride(from: 0, to: rotaryDim, by: 2).map {
+            Float(1) / pow(Float(10_000), Float($0) / Float(rotaryDim))
+        }
+        var cosValues: [Float] = []
+        var sinValues: [Float] = []
+        cosValues.reserveCapacity(positionIDs.count * headDim)
+        sinValues.reserveCapacity(positionIDs.count * headDim)
+
+        var table = [[Float]]()
+        table.reserveCapacity(maxGrid)
+        for pos in 0 ..< maxGrid {
+            table.append(invFreq.map { Float(pos) * $0 })
+        }
+
+        for (row, column) in positionIDs {
+            let rotary = table[row] + table[column]
+            let emb = rotary + rotary
+            cosValues += emb.map { Foundation.cos($0) }
+            sinValues += emb.map { Foundation.sin($0) }
+        }
+        let shape = [positionIDs.count, headDim]
+        return (
+            MLXArray(cosValues, shape).asType(dtype),
+            MLXArray(sinValues, shape).asType(dtype)
+        )
+    }
+
+    private static func windowIndexAndSeqlens(imageGridTHW: [Int]) -> ([Int32], [Int], [Int]) {
+        let t = imageGridTHW[0]
+        let gridH = imageGridTHW[1]
+        let gridW = imageGridTHW[2]
+        let llmGridH = gridH / spatialMergeSize
+        let llmGridW = gridW / spatialMergeSize
+        let window = windowSize / patchSize / spatialMergeSize
+        let padH = window - llmGridH % window
+        let padW = window - llmGridW % window
+        let paddedH = llmGridH + padH
+        let paddedW = llmGridW + padW
+        let numWindowsH = paddedH / window
+        let numWindowsW = paddedW / window
+
+        var padded = [Int](repeating: -100, count: t * paddedH * paddedW)
+        for ti in 0 ..< t {
+            for row in 0 ..< llmGridH {
+                for column in 0 ..< llmGridW {
+                    let value = ti * llmGridH * llmGridW + row * llmGridW + column
+                    padded[ti * paddedH * paddedW + row * paddedW + column] = value
+                }
+            }
+        }
+
+        var windowIndex: [Int32] = []
+        var cuWindowSeqlens = [0]
+        for ti in 0 ..< t {
+            for wh in 0 ..< numWindowsH {
+                for ww in 0 ..< numWindowsW {
+                    var count = 0
+                    for row in 0 ..< window {
+                        for column in 0 ..< window {
+                            let sourceRow = wh * window + row
+                            let sourceColumn = ww * window + column
+                            let value = padded[ti * paddedH * paddedW + sourceRow * paddedW + sourceColumn]
+                            if value != -100 {
+                                windowIndex.append(Int32(value))
+                                count += 1
+                            }
+                        }
+                    }
+                    cuWindowSeqlens.append(cuWindowSeqlens.last! + count * spatialMergeUnit)
+                }
+            }
+        }
+
+        var uniqueCuWindowSeqlens: [Int] = []
+        for value in cuWindowSeqlens where uniqueCuWindowSeqlens.last != value {
+            uniqueCuWindowSeqlens.append(value)
+        }
+
+        var cuSeqlens = [0]
+        var offset = 0
+        offset += t * gridH * gridW
+        cuSeqlens.append(offset)
+        return (windowIndex, uniqueCuWindowSeqlens, cuSeqlens)
+    }
+}
+
+private final class QwenEditVisionPatchEmbed {
+    private let weight: MLXArray
+
+    init(store: MFluxStore) throws {
+        let weight = try store.tensor("text_encoder", "encoder.visual.patch_embed.proj.weight")
+        guard weight.shape == [1280, 2, 14, 14, 3] else {
+            throw FluxError.invalidRequest("Qwen edit vision patch weight shape mismatch: \(weight.shape)")
+        }
+        self.weight = weight.reshaped([1280, 2 * 14 * 14 * 3])
+    }
+
+    func callAsFunction(_ pixelValues: MLXArray) -> MLXArray {
+        let batch = pixelValues.dim(0)
+        let channelsLast = pixelValues
+            .reshaped([batch, 3, 2, 14, 14])
+            .transposed(0, 2, 3, 4, 1)
+            .reshaped([batch, 2 * 14 * 14 * 3])
+        return matmul(channelsLast, weight.T)
+    }
+}
+
+private final class QwenEditVisionBlock {
+    private let norm1: MFluxRMSNorm
+    private let norm2: MFluxRMSNorm
+    private let attention: QwenEditVisionAttention
+    private let mlp: QwenEditVisionMLP
+
+    init(store: MFluxStore, index: Int) throws {
+        let prefix = "encoder.visual.blocks.\(index)"
+        norm1 = try store.rmsNorm("text_encoder", "\(prefix).norm1", eps: 1e-6)
+        norm2 = try store.rmsNorm("text_encoder", "\(prefix).norm2", eps: 1e-6)
+        attention = try QwenEditVisionAttention(store: store, prefix: "\(prefix).attn")
+        mlp = try QwenEditVisionMLP(store: store, prefix: "\(prefix).mlp")
+    }
+
+    func callAsFunction(_ x: MLXArray, cos: MLXArray, sin: MLXArray, cuSeqlens: [Int]) -> MLXArray {
+        var h = x + attention(norm1(x), cos: cos, sin: sin, cuSeqlens: cuSeqlens)
+        h = h + mlp(norm2(h))
+        return h
+    }
+}
+
+private final class QwenEditVisionAttention {
+    private let qkv: MFluxLinear
+    private let proj: MFluxLinear
+    private let heads = 16
+    private let headDim = 80
+    private let embedDim = 1280
+
+    init(store: MFluxStore, prefix: String) throws {
+        qkv = try store.linear("text_encoder", "\(prefix).qkv", inputDimensions: embedDim, outputDimensions: 3 * embedDim, bias: true)
+        proj = try store.linear("text_encoder", "\(prefix).proj", inputDimensions: embedDim, outputDimensions: embedDim, bias: true)
+    }
+
+    func callAsFunction(_ x: MLXArray, cos: MLXArray, sin: MLXArray, cuSeqlens: [Int]) -> MLXArray {
+        let seq = x.dim(0)
+        let qkvStates = qkv(x).reshaped([seq, 3, heads, headDim])
+        var q = qkvStates[0..., 0, 0..., 0...].transposed(1, 0, 2)
+        var k = qkvStates[0..., 1, 0..., 0...].transposed(1, 0, 2)
+        let v = qkvStates[0..., 2, 0..., 0...].transposed(1, 0, 2)
+        q = applyRope(q, cos: cos, sin: sin)
+        k = applyRope(k, cos: cos, sin: sin)
+
+        let scale = Float(1.0 / sqrt(Double(headDim)))
+        let attended: MLXArray
+        if cuSeqlens.count > 2 {
+            var chunks: [MLXArray] = []
+            for index in 0 ..< (cuSeqlens.count - 1) {
+                let start = cuSeqlens[index]
+                let end = cuSeqlens[index + 1]
+                guard end > start else { continue }
+                let range = start ..< end
+                let qChunk = q[0..., range, 0...].expandedDimensions(axis: 0)
+                let kChunk = k[0..., range, 0...].expandedDimensions(axis: 0)
+                let vChunk = v[0..., range, 0...].expandedDimensions(axis: 0)
+                let out = MLX.scaledDotProductAttention(
+                    queries: qChunk,
+                    keys: kChunk,
+                    values: vChunk,
+                    scale: scale,
+                    mask: nil)
+                chunks.append(out.squeezed(axis: 0))
+            }
+            attended = concatenated(chunks, axis: 1)
+        } else {
+            attended = MLX.scaledDotProductAttention(
+                queries: q.expandedDimensions(axis: 0),
+                keys: k.expandedDimensions(axis: 0),
+                values: v.expandedDimensions(axis: 0),
+                scale: scale,
+                mask: nil
+            ).squeezed(axis: 0)
+        }
+
+        let merged = attended.transposed(1, 0, 2).reshaped([seq, embedDim])
+        return proj(merged)
+    }
+
+    private func applyRope(_ x: MLXArray, cos: MLXArray, sin: MLXArray) -> MLXArray {
+        let xf = x.asType(.float32)
+        let c = cos.reshaped([1, cos.dim(0), cos.dim(1)]).asType(.float32)
+        let s = sin.reshaped([1, sin.dim(0), sin.dim(1)]).asType(.float32)
+        let half = x.dim(-1) / 2
+        let x1 = xf[.ellipsis, 0 ..< half]
+        let x2 = xf[.ellipsis, half ..< x.dim(-1)]
+        let rotated = concatenated([-x2, x1], axis: -1)
+        return (xf * c + rotated * s).asType(x.dtype)
+    }
+}
+
+private final class QwenEditVisionMLP {
+    private let gate: MFluxLinear
+    private let up: MFluxLinear
+    private let down: MFluxLinear
+
+    init(store: MFluxStore, prefix: String) throws {
+        gate = try store.linear("text_encoder", "\(prefix).gate_proj", inputDimensions: 1280, outputDimensions: 3420, bias: true)
+        up = try store.linear("text_encoder", "\(prefix).up_proj", inputDimensions: 1280, outputDimensions: 3420, bias: true)
+        down = try store.linear("text_encoder", "\(prefix).down_proj", inputDimensions: 3420, outputDimensions: 1280, bias: true)
+    }
+
+    func callAsFunction(_ x: MLXArray) -> MLXArray {
+        down(silu(gate(x)) * up(x))
+    }
+}
+
+private final class QwenEditPatchMerger {
+    private let ln: MFluxRMSNorm
+    private let mlp0: MFluxLinear
+    private let mlp1: MFluxLinear
+
+    init(store: MFluxStore) throws {
+        ln = try store.rmsNorm("text_encoder", "encoder.visual.merger.ln_q", eps: 1e-6)
+        mlp0 = try store.linear("text_encoder", "encoder.visual.merger.mlp_0", inputDimensions: 5120, outputDimensions: 5120, bias: true)
+        mlp1 = try store.linear("text_encoder", "encoder.visual.merger.mlp_1", inputDimensions: 5120, outputDimensions: QwenTextEncoder.hidden, bias: true)
+    }
+
+    func callAsFunction(_ x: MLXArray) -> MLXArray {
+        let normed = ln(x)
+        let merged = normed.reshaped([-1, 5120])
+        return mlp1(gelu(mlp0(merged)))
     }
 }

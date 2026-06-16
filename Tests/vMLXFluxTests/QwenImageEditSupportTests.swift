@@ -127,6 +127,37 @@ final class QwenImageEditSupportTests: XCTestCase {
             196)
     }
 
+    func testVisionFeaturesMatchMergedImageTokenCountAndHiddenSize() throws {
+        let features = QwenImageEditVisionFeatures(
+            imageFeatures: MLXArray.zeros([196, 3584], dtype: .float32),
+            imageGridTHW: [1, 28, 28])
+
+        XCTAssertEqual(features.imageTokenCount, 196)
+        XCTAssertEqual(features.hiddenSize, 3584)
+        XCTAssertNoThrow(try features.validateMatches(promptImageTokenCount: 196))
+        XCTAssertThrowsError(try features.validateMatches(promptImageTokenCount: 195))
+        XCTAssertThrowsError(try QwenImageEditVisionFeatures(
+            imageFeatures: MLXArray.zeros([196, 3583], dtype: .float32),
+            imageGridTHW: [1, 28, 28]).validateMatches(promptImageTokenCount: 196))
+    }
+
+    func testPromptEmbeddingsKeepPostTemplateMaskAndHiddenSize() throws {
+        let embeddings = QwenImageEditPromptEmbeddings(
+            promptEmbeds: MLXArray.zeros([1, 212, 3584], dtype: .float32),
+            attentionMask: MLXArray.ones([1, 212], dtype: .int32),
+            templateDropIndex: 64,
+            sourceSequenceLength: 276)
+
+        XCTAssertEqual(embeddings.sequenceLength, 212)
+        XCTAssertEqual(embeddings.hiddenSize, 3584)
+        XCTAssertNoThrow(try embeddings.validate())
+        XCTAssertThrowsError(try QwenImageEditPromptEmbeddings(
+            promptEmbeds: MLXArray.zeros([1, 212, 3583], dtype: .float32),
+            attentionMask: MLXArray.ones([1, 212], dtype: .int32),
+            templateDropIndex: 64,
+            sourceSequenceLength: 276).validate())
+    }
+
     func testVAEInputUsesMinusOneToOneNCHWAtConditioningSize() throws {
         let source = try makePNG(width: 512, height: 512, rgba: (255, 128, 0, 255))
         let plan = try QwenImageEditPreprocessPlan(
