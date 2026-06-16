@@ -217,7 +217,8 @@ their 4-bit linears through scale tensors at load time inside the model.
 | **z-image-turbo** | `native_pipeline_implemented` | Full native port: Qwen-style text encoder, patchify+caption-concat DiT (noise/context refiners + unified layers, RoPE, adaLN, timestep embed), real `AutoencoderKL` VAE decode, real 4-bit weight decode, PNG out. | Live same-seed prompt-sensitivity proof (see §8). 1024px tuning. |
 | qwen-image / qwen-image-edit | `not_implemented` | Bundle scans + loads. | Qwen text-encoder port + transformer weight key-map. Body throws `notImplemented`. |
 | flux2-klein / flux2-klein-edit | `not_implemented` | Bundle scans + loads; `FluxDiTConfig.flux2Klein` preset exists. | T5 (single-encoder) port + weight key-map + 3-axis RoPE. |
-| flux1-schnell/dev/kontext/fill | `not_implemented` | Scheduler, VAE, DiT topology + 40-line BFL key-map docblock exist in `FluxDiT.swift`. | T5-XXL + CLIP-L ports + `Module.update` key mapping + Flux 3-axis RoPE. |
+| **flux1-schnell** | ✅ **WORKING (live-proven 2026-06-15)** | Full native pipeline `Flux1Native.swift`: T5-XXL + CLIP-L encoders, full DiT (19 joint + 38 single blocks, 24h×128, 3-axis RoPE), AutoencoderKL VAE, 4-bit mflux decode. 512px/4-step ~3.9s; deterministic + prompt-sensitive + coherent. | tokenizer.json must be staged (mflux ships slow tokenizers — convert; see port plan). 8-bit/full quant matrix pending. |
+| flux1-dev/kontext/fill | `not_implemented` | dev = schnell + guidance embedder (small add); kontext/fill = edit variants. | wire guidance + edit conditioning on the working schnell pipeline. |
 | seedvr2 | scaffold | registered | upscale arch (different family). |
 | wan-2.1 / wan-2.2 | scaffold | full pipeline scaffolded (WanVAE3D + WanDiT + MP4 writer) with random weights. | real weight key-map, real Conv3d (currently a Conv2d shim), windowed attention for >3-4s clips. |
 
