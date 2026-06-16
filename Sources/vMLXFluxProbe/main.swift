@@ -346,10 +346,10 @@ struct VMLXFluxProbe {
 
     private static func runtimeStatus(for canonicalName: String?) -> String {
         switch canonicalName {
-        case "z-image-turbo":
+        case "z-image-turbo", "flux1-schnell", "qwen-image":
             return "native_pipeline_implemented"
-        case "flux1-schnell", "flux1-dev", "flux1-kontext", "flux1-fill",
-             "flux2-klein", "flux2-klein-edit", "qwen-image", "qwen-image-edit",
+        case "flux1-dev", "flux1-kontext", "flux1-fill",
+             "flux2-klein", "flux2-klein-edit", "qwen-image-edit",
              "fibo", "seedvr2":
             return "not_implemented"
         case "wan-2.1", "wan-2.2":
@@ -363,13 +363,19 @@ struct VMLXFluxProbe {
 
     private static func runtimeBlockers(for canonicalName: String?) -> [String] {
         switch canonicalName {
-        case "z-image-turbo":
+        case "z-image-turbo", "flux1-schnell", "qwen-image":
             return [
                 "requires live same-seed prompt-sensitivity and multi-turn matrix before production promotion",
             ]
-        case "flux1-schnell", "flux1-dev", "flux1-kontext", "flux1-fill",
-             "flux2-klein", "flux2-klein-edit", "qwen-image", "qwen-image-edit",
-             "fibo", "seedvr2":
+        case "qwen-image-edit":
+            return [
+                "model edit body throws FluxError.notImplemented",
+                "Qwen2.5-VL vision encoder implementation is missing",
+                "VAE image encode and conditioning latent concat path is missing",
+                "live image-edit proof is missing",
+            ]
+        case "flux1-dev", "flux1-kontext", "flux1-fill",
+             "flux2-klein", "flux2-klein-edit", "fibo", "seedvr2":
             return [
                 "model generate/edit/upscale body throws FluxError.notImplemented",
                 "text encoder ports are missing",

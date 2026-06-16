@@ -127,19 +127,30 @@ for try await event in engine.generate(request) {
 
 ## Status
 
-**`z-image-turbo` is a working native pipeline** — `ZImageNative.swift` ports the
-full model (Qwen-style text encoder + patchify/RoPE/adaLN DiT with noise/context
-refiners + `AutoencoderKL` VAE + 4-bit mflux weight decode). Live-proven
-2026-06-15 on the 4-bit mflux bundle: same-seed/same-prompt is byte-deterministic,
-same-seed/different-prompt yields distinct coherent prompt-accurate images
-(photographic apple vs watercolor mountain) at ~4 s per 512px/8-step image. Now
-also vendored into `vmlx-swift` as in-tree targets so the whole vMLX stack shares
-one MLX runtime — see `OSAURUS_VMLX_FLUX_INTEGRATION_SPEC.md` for the osaurus
-wiring spec. `vmlxflux-probe` is the scan/load/generate verification CLI.
+**Fresh native proof as of 2026-06-16:**
 
-**The remaining models register but their generation bodies still throw
-`FluxError.notImplemented`** (qwen-image(-edit), flux2-klein, flux1-*, seedvr2,
-wan-2.x). Their ports need:
+- `z-image-turbo` 4-bit and 8-bit: live load + three-turn generate + same-seed
+  SHA determinism + prompt sensitivity + viewed coherent apple/mountain images.
+- `flux1-schnell` 4-bit and 8-bit: live load + three-turn generate + finite
+  stage diagnostics + same-seed SHA determinism + prompt sensitivity + viewed
+  coherent apple/mountain images.
+- `qwen-image` 4-bit: live load + 20-step CFG generation + same-seed SHA
+  determinism + prompt sensitivity, but the visual row is only `PARTIAL` until a
+  stronger prompt-accuracy proof is captured.
+- `qwen-image-edit` q4: local scan + manifest-gated engine load passed against
+  the staged nested bundle. This is load-only `PARTIAL` proof; image editing is
+  still blocked because `QwenImageEdit.edit` throws `FluxError.notImplemented`.
+
+`vmlxflux-probe` is the scan/load/generate verification CLI. Run live probes from
+`/Users/eric/vmlx-swift` or another directory containing `default.metallib`; the
+standalone checkout does not currently include that Metal library.
+
+**Still not implemented:** `qwen-image-edit`, flux1 edit/dev variants,
+`flux2-klein`, `fibo`, `seedvr2`, and `wan-2.x`. `Qwen-Image-Edit-mflux` staged
+weights are nested quant variants; the local store lists `Qwen-Image-Edit-mflux-q3`,
+`-q4`, `-q5`, and incomplete `-q6`; q4 now has load-only proof at
+`docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-manifest-load/`. Their
+remaining ports need:
 
 1. **FluxTransformer** (Dual-encoder Flux1 + single-encoder Flux2, DiT)
 2. **T5-XXL text encoder** (shared across Flux + Qwen + Wan)

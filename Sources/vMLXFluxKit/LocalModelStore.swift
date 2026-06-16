@@ -55,10 +55,15 @@ public struct MLXStudioModelStore: Sendable {
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         )
-        return try entries.compactMap { url in
+        return try entries.flatMap { url -> [LocalFluxModel] in
             let values = try url.resourceValues(forKeys: [.isDirectoryKey])
-            guard values.isDirectory == true else { return nil }
-            return try Self.inspect(directory: url)
+            guard values.isDirectory == true else { return [] }
+            let parent = try Self.inspect(directory: url)
+            let variants = try Self.nestedQuantVariants(in: url, parent: parent)
+            if !variants.isEmpty && parent.readiness != .loadableScaffold {
+                return variants
+            }
+            return variants.isEmpty ? [parent] : [parent] + variants
         }
         .sorted { $0.directoryName.localizedStandardCompare($1.directoryName) == .orderedAscending }
     }
@@ -94,8 +99,18 @@ public struct MLXStudioModelStore: Sendable {
     }
 
     public static func inspect(directory: URL) throws -> LocalFluxModel {
-        let name = directory.lastPathComponent
-        let canonical = canonicalName(for: name)
+        try inspect(directory: directory, directoryName: directory.lastPathComponent)
+    }
+
+    private static func inspect(
+        directory: URL,
+        directoryName: String,
+        canonicalName canonicalOverride: String? = nil,
+        quantizationBits quantizationOverride: Int? = nil
+    ) throws -> LocalFluxModel {
+        let name = directoryName
+        let canonical = canonicalOverride
+            ?? canonicalName(for: name)
             ?? ModelRegistry.lookupFuzzy(name: name)?.name
         let entry = canonical.flatMap { ModelRegistry.lookup(name: $0) }
         let components = try detectComponents(in: directory)
@@ -122,7 +137,7 @@ public struct MLXStudioModelStore: Sendable {
             canonicalName: canonical,
             displayName: entry?.displayName ?? displayName(forCanonicalName: canonical) ?? name,
             kind: entry?.kind ?? defaultKind(forCanonicalName: canonical),
-            quantizationBits: quantizationBits(in: name),
+            quantizationBits: quantizationOverride ?? quantizationBits(in: name),
             components: components,
             safetensorCount: safetensors.count,
             totalBytes: safetensors.bytes,
@@ -194,7 +209,36 @@ public struct MLXStudioModelStore: Sendable {
                 return bits
             }
         }
+        for part in parts where part.hasPrefix("q") {
+            let digits = part.dropFirst()
+            if let bits = Int(digits) {
+                return bits
+            }
+        }
         return nil
+    }
+
+    private static func nestedQuantVariants(
+        in directory: URL,
+        parent: LocalFluxModel
+    ) throws -> [LocalFluxModel] {
+        let fm = FileManager.default
+        let children = try fm.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+        return try children.compactMap { child in
+            let values = try child.resourceValues(forKeys: [.isDirectoryKey])
+            guard values.isDirectory == true else { return nil }
+            guard let bits = quantizationBits(in: child.lastPathComponent) else { return nil }
+            let variantName = "\(parent.directoryName)-\(child.lastPathComponent)"
+            return try inspect(
+                directory: child,
+                directoryName: variantName,
+                canonicalName: parent.canonicalName,
+                quantizationBits: bits)
+        }
     }
 
     private static func detectComponents(in directory: URL) throws -> Set<LocalFluxComponent> {

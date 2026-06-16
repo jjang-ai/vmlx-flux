@@ -1,9 +1,49 @@
 # vmlx-flux Progress Tracker
 
-**Last session**: 2026-06-15
+**Last session**: 2026-06-16
 **Branch**: `native-zimage-proven` (off `main`)
 **Build**: `swift build` ✅ · `vmlxflux-probe` builds standalone + vendored in vmlx-swift
 **Repo**: https://github.com/jjang-ai/vmlx-flux
+
+### 2026-06-16 — fresh live baseline + Qwen-Edit local variant scan
+- **Fresh live proof rerun:** run the standalone probe binary from
+  `/Users/eric/vmlx-swift` so MLX resolves `default.metallib`; running from the
+  standalone repo without that file fails before load with "Failed to load the
+  default metallib."
+- **z-image-turbo 4-bit + 8-bit:** live load + 3-turn generate passed. Turn 1
+  and 3 same seed/prompt had matching SHA; turn 2 same seed/different prompt had
+  a different SHA; viewed coherent apple and mountain images. Artifacts:
+  `docs/local/vmlx-flux-probes/2026-06-16-baseline*` and
+  `docs/local/vmlx-flux-outputs/2026-06-16-baseline*`.
+- **flux1-schnell 4-bit + 8-bit:** live load + 3-turn generate passed with
+  finite stage diagnostics; same-prompt SHA matched and different-prompt SHA
+  differed; viewed coherent apple and mountain images. Artifacts:
+  `docs/local/vmlx-flux-probes/2026-06-16-baseline-flux*` and
+  `docs/local/vmlx-flux-outputs/2026-06-16-baseline-flux*`.
+- **qwen-image 4-bit:** live load + 20-step CFG generation passed, with finite
+  stage diagnostics and matching same-prompt SHA. Visual output was recognizable
+  apple/mountain but weaker on the apple prompt's "photo/wooden table" fidelity;
+  keep this row `PARTIAL` until a stronger prompt-accuracy proof is captured.
+- **Qwen-Image-Edit staged bundle:** `~/.mlxstudio/models/image/Qwen-Image-Edit-mflux`
+  is present. `MLXStudioModelStore.scan()` now expands nested `q3/q4/q5/q6`
+  directories into local variants: `q3`, `q4`, and `q5` are loadable local
+  bundles; `q6` is incomplete because it lacks transformer and VAE shards.
+  The q4 variant also passes the Qwen-Edit manifest-gated engine load contract
+  (tokenizer files, Qwen LM keys, Qwen-VL vision keys, transformer markers, VAE
+  encode/decode keys). Live load-only artifact:
+  `docs/local/vmlx-flux-probes/2026-06-16-qwen-edit-q4-manifest-load/Qwen-Image-Edit-mflux-q4-load.json`
+  with `load_status=loaded`, `canonical=qwen-image-edit`, `kind=imageEdit`,
+  `quant=4`, and `generate_requested=false`.
+- **Qwen-Edit guardrail tests:** red test first caught the previous fake load
+  (`QwenImageEdit` accepted a bundle missing vision tower keys). After the
+  validator landed,
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter vMLXFluxTests.RegistryTests/testQwenImageEdit`
+  passed 3 tests and full `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test`
+  passed 23 tests.
+- **Probe metadata fixed:** scan JSON now reports `native_pipeline_implemented`
+  for `z-image-turbo`, `flux1-schnell`, and `qwen-image`; `qwen-image-edit`
+  remains `not_implemented` with blockers for the missing Qwen2.5-VL vision
+  encoder, VAE image encode/conditioning path, and live edit proof.
 
 ### 2026-06-15 — native Z-Image proven + vendored into vmlx-swift
 - **`ZImageNative.swift` (NEW, 1202 lines)**: full native Z-Image-Turbo pipeline —
